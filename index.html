@@ -11,7 +11,11 @@
         const currentHash = window.location.hash;
         
         // Fetch and inject content
-        fetch(basePath + currentPath + currentSearch + currentHash)
+        fetch(basePath + currentPath + currentSearch + currentHash, {
+            headers: {
+                'Accept': 'text/html'
+            }
+        })
             .then(response => response.text())
             .then(html => {
                 document.documentElement.innerHTML = html;
@@ -20,6 +24,10 @@
                 canon.rel = 'canonical';
                 canon.href = 'https://ai.damtp.cam.ac.uk/PySR' + currentPath;
                 document.head.appendChild(canon);
+            })
+            .catch(error => {
+                console.error('Error fetching content:', error);
+                document.body.innerHTML = `<p>Error loading content. Please try <a href="${basePath + currentPath + currentSearch + currentHash}">the original site</a>.</p>`;
             });
     </script>
 </head>
