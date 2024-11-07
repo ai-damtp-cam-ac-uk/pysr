@@ -3,47 +3,53 @@
 <head>
     <title>PySR Documentation</title>
     <link rel="canonical" href="https://ai.damtp.cam.ac.uk/PySR" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
 </head>
 <body>
+    <iframe id="docs-frame" src="https://astroautomata.com/PySR"></iframe>
     <script>
-        const basePath = 'https://astroautomata.com/PySR';
-        const currentPath = window.location.pathname.replace('/PySR', '');
-        const currentSearch = window.location.search;
-        const currentHash = window.location.hash;
+        const iframe = document.getElementById('docs-frame');
+        const basePath = '/PySR';
         
-        fetch(basePath + currentPath + currentSearch + currentHash)
-            .then(response => response.text())
-            .then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
+        // Handle initial load and subsequent navigation
+        iframe.onload = () => {
+            try {
+                const iframePath = new URL(iframe.contentWindow.location.href).pathname;
+                const localPath = iframePath.replace('/PySR', basePath);
                 
-                // Fix relative URLs to be absolute
-                const fixUrl = (url) => {
-                    if (!url) return url;
-                    if (url.startsWith('http')) return url;
-                    if (url.startsWith('/')) return `https://astroautomata.com${url}`;
-                    return `https://astroautomata.com/PySR/${url}`;
-                };
+                // Update browser URL without reloading
+                if (window.location.pathname !== localPath) {
+                    window.history.pushState({}, '', localPath);
+                }
+            } catch (e) {
+                console.error('Unable to access iframe location:', e);
+            }
+        };
 
-                // Fix all relative URLs in attributes
-                ['href', 'src'].forEach(attr => {
-                    doc.querySelectorAll(`[${attr}]`).forEach(el => {
-                        el.setAttribute(attr, fixUrl(el.getAttribute(attr)));
-                    });
-                });
-                
-                // Copy head elements except title and canonical
-                Array.from(doc.head.children).forEach(child => {
-                    if (child.tagName !== 'TITLE' && !child.matches('[rel="canonical"]')) {
-                        document.head.appendChild(child.cloneNode(true));
-                    }
-                });
-                
-                // Replace body content
-                document.body.innerHTML = doc.body.innerHTML;
-            })
-            .catch(error => console.error('Error:', error));
+        // Handle browser back/forward buttons
+        window.onpopstate = (event) => {
+            const currentPath = window.location.pathname;
+            const astroPath = currentPath.replace(basePath, '/PySR');
+            iframe.src = `https://astroautomata.com${astroPath}`;
+        };
+
+        // Handle initial URL
+        if (window.location.pathname !== basePath) {
+            const initialPath = window.location.pathname.replace(basePath, '/PySR');
+            iframe.src = `https://astroautomata.com${initialPath}`;
+        }
     </script>
-    <p>Loading PySR documentation...</p>
 </body>
 </html>
