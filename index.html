@@ -17,6 +17,21 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 
+                // Fix relative URLs to be absolute
+                const fixUrl = (url) => {
+                    if (!url) return url;
+                    if (url.startsWith('http')) return url;
+                    if (url.startsWith('/')) return `https://astroautomata.com${url}`;
+                    return `https://astroautomata.com/PySR/${url}`;
+                };
+
+                // Fix all relative URLs in attributes
+                ['href', 'src'].forEach(attr => {
+                    doc.querySelectorAll(`[${attr}]`).forEach(el => {
+                        el.setAttribute(attr, fixUrl(el.getAttribute(attr)));
+                    });
+                });
+                
                 // Copy head elements except title and canonical
                 Array.from(doc.head.children).forEach(child => {
                     if (child.tagName !== 'TITLE' && !child.matches('[rel="canonical"]')) {
