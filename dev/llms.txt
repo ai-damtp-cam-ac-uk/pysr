@@ -1,0 +1,41 @@
+# PySR
+
+> High-Performance Symbolic Regression in Python and Julia
+
+Coding agents should read the PySR agent skill before writing PySR code: https://raw.githubusercontent.com/astroautomata/PySR/master/skills/pysr/SKILL.md. Install it with `npx skills add astroautomata/PySR`.
+
+## Table of Contents
+
+### Getting Started
+
+- [Examples](https://pysr.ai/dev/examples.md)
+
+### Examples
+
+- [Getting started](https://pysr.ai/dev/examples/getting-started.md)
+- [Expression specifications](https://pysr.ai/dev/examples/expression-specifications.md)
+- [Objectives and losses](https://pysr.ai/dev/examples/objectives.md)
+- [Physics and units](https://pysr.ai/dev/examples/physics.md)
+- [Search behaviour](https://pysr.ai/dev/examples/search-behaviour.md)
+- [Instrumentation and workflow](https://pysr.ai/dev/examples/instrumentation.md)
+- [Value types](https://pysr.ai/dev/examples/value-types.md)
+- [Beyond numeric values](https://pysr.ai/dev/examples/beyond-numeric-values.md)
+
+### Reference
+
+- [API Reference](https://pysr.ai/dev/api.md)
+- [Operators](https://pysr.ai/dev/operators.md)
+- [Features and Options](https://pysr.ai/dev/options.md)
+- [Internal Reference](https://pysr.ai/dev/api-advanced.md)
+
+### Community
+
+- [Research](https://pysr.ai/dev/papers.md)
+
+### Advanced
+
+- [Tuning and Workflow Tips](https://pysr.ai/dev/tuning.md)
+- [Slurm (Multi-node)](https://pysr.ai/dev/slurm.md)
+- [Customization](https://pysr.ai/dev/backend.md)
+- [Migrating from v1 to v2](https://pysr.ai/dev/migration.md)
+

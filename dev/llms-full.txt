@@ -1,0 +1,4827 @@
+---
+url: https://pysr.ai/dev/examples.md
+---
+# Examples
+
+These examples show how to set up a symbolic regression search and adapt it to
+your data, equation structure, or objective. If you are new to PySR, begin with
+Getting started. Otherwise, choose the topic that matches your task.
+
+## [Getting started](/examples/getting-started)
+
+* [Simple search](/examples/getting-started#simple-search): fit generated data and inspect the resulting expressions.
+* [Custom operator](/examples/getting-started#custom-operator): add an operator and define its symbolic export.
+* [Multiple outputs](/examples/getting-started#multiple-outputs): fit expressions for several target columns.
+* [Plotting an expression](/examples/getting-started#plotting-an-expression): export LaTeX and compare predictions with target values.
+* [Feature selection](/examples/getting-started#feature-selection): reduce the input variables considered by the search.
+* [Denoising](/examples/getting-started#denoising): smooth a noisy target with a Gaussian process before fitting expressions.
+
+## [Expression specifications](/examples/expression-specifications)
+
+* [Expression specifications](/examples/expression-specifications#expression-specifications): constrain equation structure and learn category-dependent parameters.
+* [Recovering a magnetic field from force measurements](/examples/expression-specifications#recovering-a-magnetic-field-from-force-measurements): supply the known force law in a template and search for its unknown functions.
+
+## [Objectives and losses](/examples/objectives)
+
+* [Custom objectives](/examples/objectives#custom-objectives): score complete candidate expressions with a Julia function.
+* [Writing the objective in Python](/examples/objectives#writing-the-objective-in-python): use a Python function to score candidates during the search.
+* [Swinging up a cart-pole with a rollout objective](/examples/objectives#swinging-up-a-cart-pole-with-a-rollout-objective): evaluate each candidate controller in a simulation.
+* [Inventing a pseudorandom generator with no target](/examples/objectives#inventing-a-pseudorandom-generator-with-no-target): score generators without observed target outputs.
+
+## [Physics and units](/examples/physics)
+
+* [Dimensional constraints](/examples/physics#dimensional-constraints): attach physical units to the search problem.
+* [Using differential operators](/examples/physics#using-differential-operators): include derivatives in an expression template.
+* [Discovering a PDE](/examples/physics#discovering-a-pde): search for a differential equation using sampled field data.
+
+## [Search behaviour](/examples/search-behaviour)
+
+* [Automatic batching on a large dataset](/examples/search-behaviour#automatic-batching-on-a-large-dataset): evaluate candidates on batches drawn from the data.
+* [Operators of any arity](/examples/search-behaviour#operators-of-any-arity): supply operators that take more than two arguments.
+* [Mutations and plugins](/examples/search-behaviour#mutations-and-plugins): configure mutation weights and search plugins.
+* [Adaptive mutation weights](/examples/search-behaviour#adaptive-mutation-weights): adjust mutation choices as the search progresses.
+* [The backsolve mutation](/examples/search-behaviour#the-backsolve-mutation): derive targets for a replacement subtree from the operators above it.
+
+## [Instrumentation and workflow](/examples/instrumentation)
+
+* [Using TensorBoard for logging](/examples/instrumentation#using-tensorboard-for-logging): log progress and metrics from the search for inspection in TensorBoard.
+* [Recording the genealogy of a search](/examples/instrumentation#recording-the-genealogy-of-a-search): inspect the relationships between expressions in a recorded search.
+* [Closing an agent loop with `guesses=`](/examples/instrumentation#closing-an-agent-loop-with-guesses): supply candidate expressions as guesses for another search round.
+
+## [Value types](/examples/value-types)
+
+* [Complex numbers](/examples/value-types#complex-numbers): fit expressions to complex-valued data.
+* [Julia packages and types](/examples/value-types#julia-packages-and-types): use a Julia package inside a search operator.
+* [Custom value types](/examples/value-types#custom-value-types): define the values used by expressions and how PySR handles them.
+
+## [Beyond numeric values](/examples/beyond-numeric-values)
+
+* [Breaking an affine cipher with a letter type](/examples/beyond-numeric-values#breaking-an-affine-cipher-with-a-letter-type): decode text with expressions that operate on letters.
+* [Rediscovering Conway's Game of Life](/examples/beyond-numeric-values#rediscovering-conway-s-game-of-life): learn the update rule from a finite table of cell transitions.
+* [Searching over machine words](/examples/beyond-numeric-values#searching-over-machine-words): build expressions from bitwise operations.
+* [Turtle graphics: searching over drawings](/examples/beyond-numeric-values#turtle-graphics-searching-over-drawings): search for a program that draws a target shape.
+* [Evolving a hopping controller](/examples/beyond-numeric-values#evolving-a-hopping-controller): replay a three-joint controller learned through simulated rollouts.
+
+See the [Options section](/options) for other ways to configure the search.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/getting-started.md
+---
+# Getting started
+
+## Simple search
+
+This target combines a cosine term, a square term, and a constant.
+
+The model searches with `+`, `-`, `*`, and `/`. To include the cosine used in the target, add `unary_operators=["cos"]`.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor
+
+X = 2 * np.random.randn(100, 5)
+y = 2 * np.cos(X[:, 3]) + X[:, 0] ** 2 - 2
+model = PySRRegressor(binary_operators=["+", "-", "*", "/"])
+model.fit(X, y)
+print(model)
+```
+
+## Custom operator
+
+A custom operator has a definition for the symbolic search and a callable for SymPy export and for evaluating equations. Here `inv(x) = 1/x` defines the Julia-side reciprocal operator, while `extra_sympy_mappings` gives that name its Python implementation.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor
+
+X = 2 * np.random.randn(100, 5)
+y = 1 / X[:, 0]
+model = PySRRegressor(
+    binary_operators=["+", "*"],
+    unary_operators=["inv(x) = 1/x"],
+    extra_sympy_mappings={"inv": lambda x: 1/x},
+)
+model.fit(X, y)
+print(model)
+```
+
+The generic `operators` parameter replaces the separate `unary_operators` and `binary_operators`. Its integer keys specify arity, so a dictionary can describe unary, binary, and higher-arity operators. See the [Operators of any arity](/examples/search-behaviour#operators-of-any-arity) section for this form.
+
+## Multiple outputs
+
+A two-dimensional target makes the model multi-output. Here each column of `y` is the reciprocal of a different input feature, so the fitted model supplies one selected equation for each output.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor
+
+X = 2 * np.random.randn(100, 5)
+y = 1 / X[:, [0, 1, 2]]
+model = PySRRegressor(
+    binary_operators=["+", "*"],
+    unary_operators=["inv(x) = 1/x"],
+    extra_sympy_mappings={"inv": lambda x: 1/x},
+)
+model.fit(X, y)
+```
+
+## Plotting an expression
+
+After fitting the multi-output model, `model.latex()[0]` returns the LaTeX form of the selected equation for output 0.
+
+```python
+model.latex()[0]
+```
+
+Use `model.latex()[1]` for output 1.
+
+The plot below compares the target and prediction for output 0.
+
+```python
+from matplotlib import pyplot as plt
+plt.scatter(y[:, 0], model.predict(X)[:, 0])
+plt.xlabel('Truth')
+plt.ylabel('Prediction')
+plt.show()
+```
+
+![Truth vs Prediction](/images/example_plot.png)
+
+The `index` argument chooses a candidate equation from `model.equations_`. Pass it to `predict`, `sympy`, or `latex` to inspect or evaluate another candidate. For multiple outputs, provide one equation index per output in output order, then select the desired output column from the predictions.
+
+## Feature selection
+
+Feature selection reduces the candidate input columns before symbolic regression. Set `select_k_features=5` to use a random-forest preprocessor that retains up to five candidates. For structured high-dimensional data, the paper [2006.11287](https://arxiv.org/abs/2006.11287) discusses breaking the problem into smaller pieces before applying PySR.
+
+The target in this example uses features 3 and 19.
+
+```python
+import numpy as np
+
+X = np.random.randn(300, 30)
+y = X[:, 3]**2 - X[:, 19]**2 + 1.5
+```
+
+Configure feature selection in the model:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["exp"],
+    select_k_features=5,
+)
+```
+
+Fit the model to select the input columns before the search:
+
+```python
+model.fit(X, y)
+```
+
+PySR prints the selected feature names before starting the search, for example:
+
+```text
+Using features ['x3', 'x5', 'x7', 'x19', 'x21']
+```
+
+The names use zero-based column indices. This selection includes both target features, `x3` and `x19`, plus three other candidates. The symbolic search uses only these retained columns.
+
+## Denoising
+
+When per-observation weights are available, pass `weights` to `fit` and define `elementwise_loss` with the matching signature. Without weights, the function accepts `(prediction, target)`. With weights, it accepts `(prediction, target, weight)`. The weighted example uses `elementwise_loss="myloss(x, y, w) = w * (x - y)^2"`. Pass a full custom objective as `loss_function`.
+
+The `denoise=True` option preprocesses the targets with a Gaussian process before symbolic regression. Its predictions become the targets searched by PySR. Because this example passes no `Xresampled`, the predictions are made at the original rows in `X`.
+
+The target combines an exponential term, two linear terms, and random noise:
+
+```python
+import numpy as np
+
+X = np.random.randn(100, 5)
+noise = np.random.randn(100) * 0.1
+y = np.exp(X[:, 0]) + X[:, 1] + X[:, 2] + noise
+```
+
+Create and fit the denoising model:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["exp"],
+    denoise=True,
+)
+model.fit(X, y)
+print(model)
+```
+
+---
+
+---
+url: https://pysr.ai/dev/examples/expression-specifications.md
+---
+# Expression specifications
+
+## Expression specifications
+
+Use an expression specification when part of the equation is known in advance.
+It fixes the structure around learnable subexpressions while preserving PySR's ordinary
+fitting and prediction interfaces. Inspect template components through `model.equations_`;
+the arbitrary Julia `combine` string does not provide the usual SymPy or LaTeX exports.
+Choose `TemplateExpressionSpec` when the outer form is known and the inner functions remain unknown.
+
+### Template Expressions
+
+Write the outer form in `combine` and name each learnable hole in `expressions`.
+`variable_names` supplies the column names available to `combine`, and each
+hole receives the arguments written in its call. Here `f` receives `x_1` and `x_2`,
+while `g` receives `x_3`, so the search keeps those input roles separate. The target
+form is:
+
+$$ y = \sin(f(x_1, x_2)) + g(x_3) $$
+
+The code below creates the data, declares the template, and fits the model:
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TemplateExpressionSpec
+
+# Create data
+X = np.random.randn(1000, 3)
+y = np.sin(X[:, 0] + X[:, 1]) + X[:, 2]**2
+
+# Define template: we want sin(f(x1, x2)) + g(x3)
+template = TemplateExpressionSpec(
+    expressions=["f", "g"],
+    variable_names=["x1", "x2", "x3"],
+    combine="sin(f(x1, x2)) + g(x3)",
+)
+
+model = PySRRegressor(
+    expression_spec=template,
+    binary_operators=["+", "*", "-", "/"],
+    unary_operators=["sin"],
+    maxsize=10,
+)
+model.fit(X, y)
+```
+
+### Parametric Expressions
+
+Add learnable parameter vectors to the template when categories share a formula
+but require different coefficients. This example uses category-specific scale and offset
+values for the target:
+
+$$ y = \alpha \sin(x_1) + \beta $$
+
+Here $\alpha$ is the category-specific scale and $\beta$ is the offset. The
+example has $3$ categories, with $\alpha \in {1.0, 2.0, 0.5}$ and
+$\beta \in {0.1, 1.5, -0.5}$.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TemplateExpressionSpec
+
+# Create data with 2 features and 3 categories
+X = np.random.uniform(-3, 3, (1000, 2))
+category = np.random.randint(0, 3, 1000)
+
+# Parameters for each category
+offsets = [0.1, 1.5, -0.5]
+scales = [1.0, 2.0, 0.5]
+
+# y = scale[category] * sin(x1) + offset[category]
+y = np.array([
+    scales[c] * np.sin(x1) + offsets[c]
+    for x1, c in zip(X[:, 0], category)
+])
+```
+
+Declare the parameter-vector lengths, optimize their entries during the search,
+and use the selected values in the template. The following block defines that
+parametric expression:
+
+```python
+from pysr import TemplateExpressionSpec
+
+template = TemplateExpressionSpec(
+    expressions=["f"],
+    variable_names=["x1", "x2", "category"],
+    parameters={"p1": 3, "p2": 3},  # One parameter per category
+    combine="f(x1, x2, p1[category], p2[category])"
+)
+```
+
+Append the category as the column listed in `variable_names`; the template indexes
+that column when it selects parameter entries. Python labels start at zero, whereas
+Julia arrays start at one, so shift the labels before stacking them.
+
+```python
+import numpy as np
+
+category_p_one = category + 1
+X_with_category = np.column_stack([X, category_p_one])
+```
+
+Fit the model with the augmented feature matrix, and retain this category column
+for any later `predict` call. The template uses it to choose the corresponding
+parameter entry:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    expression_spec=template,
+    binary_operators=["+", "*", "-", "/"],
+    unary_operators=["sin"],
+    maxsize=10,
+)
+model.fit(X_with_category, y)
+
+# Evaluate the fitted model on the same feature/category rows:
+model.predict(X_with_category)
+```
+
+See [Expression Specifications](/api#expression-specifications) for the complete
+reference to this API. The same pattern extends to several template holes and to parameter
+vectors whose entries vary by category.
+
+### Learning multiple outputs jointly
+
+`TemplateExpressionSpec` can couple several scalar holes through one scalar
+residual. Put the observed components in `X`, let the template construct each
+prediction, and return the combined error. This is useful when the components share
+a known outer term.
+
+The target consists of $3$ components. Each contains the shared term $\exp(x_1)$
+and its own second term:
+
+$$\begin{align\*}
+y_1 &= \exp(x_1) + x_2^2 \\
+y_2 &= \exp(x_1) + \sin(x_3) \\
+y_3 &= \exp(x_1) + x_1 \cdot x_2
+\end{align\*}$$
+
+The data and their noise are generated in the following block:
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TemplateExpressionSpec
+
+n = 200
+rstate = np.random.RandomState(0)
+x1 = rstate.uniform(-2, 2, n)
+x2 = rstate.uniform(-2, 2, n)
+x3 = rstate.uniform(-2, 2, n)
+
+# True model with shared component exp(x1):
+y1 = np.exp(x1) + x2**2
+y2 = np.exp(x1) + np.sin(x3)
+y3 = np.exp(x1) + x1 * x2
+
+# Add some noise
+y1 += 0.05 * rstate.randn(n)
+y2 += 0.05 * rstate.randn(n)
+y3 += 0.05 * rstate.randn(n)
+```
+
+`X` contains the three inputs followed by the three observed target components,
+in the same order listed in `variable_names`. The template can therefore use the
+target columns while building its residual:
+
+```python
+import numpy as np
+
+X = np.column_stack([x1, x2, x3, y1, y2, y3])
+```
+
+The template returns the sum of squared errors across the three components for each row.
+
+These sums constrain the predicted components, while the individual `shared` and `f*` terms are not uniquely identifiable. A common function can be added to `shared` and subtracted from every `f*` without changing the residual, so the values in the evaluation block are conditional on recovering the intended decomposition.
+
+```python
+from pysr import TemplateExpressionSpec
+
+spec = TemplateExpressionSpec(
+    expressions=["f1", "f2", "f3", "shared"],
+    variable_names=["x1", "x2", "x3", "y1", "y2", "y3"],
+    combine="""
+        v = shared(x1, x2, x3)
+        y1_predicted = v + f1(x1, x2, x3)
+        y2_predicted = v + f2(x1, x2, x3)
+        y3_predicted = v + f3(x1, x2, x3)
+
+        residuals = (
+            abs2(y1 - y1_predicted) +
+            abs2(y2 - y2_predicted) +
+            abs2(y3 - y3_predicted)
+        )
+
+        residuals
+    """
+)
+```
+
+The fit uses a dummy target and an `elementwise_loss` that returns the template
+value, because `combine` already returns a row-wise squared residual. The estimator
+still receives `dummy_y` to satisfy the fit interface; those zeros do not enter the
+residual:
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    expression_spec=spec,
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["exp", "sin"],
+    maxsize=20,
+    niterations=50,
+    elementwise_loss="(pred, target) -> pred",
+)
+
+dummy_y = np.zeros(n)
+model.fit(X, dummy_y)
+```
+
+Inspect the fitted named expressions through their Julia objects:
+
+```python
+# Simply get the expression with the highest score:
+idx = model.equations_.score.idxmax()
+
+# Extract the Julia object:
+julia_expr = model.equations_.loc[idx, 'julia_expression']
+
+# Access individual subexpressions:
+for name in ['f1', 'f2', 'f3', 'shared']:
+    tree = getattr(julia_expr.trees, name)
+    print(f"{name}: {tree}")
+```
+
+The named trees can also be evaluated directly through the Julia bridge:
+
+```python
+import numpy as np
+
+from pysr import jl
+from pysr.julia_helpers import jl_array
+
+SR = jl.SymbolicRegression
+
+# Get individual trees
+f1_tree = julia_expr.trees.f1
+shared_tree = julia_expr.trees.shared
+
+# Evaluate one point (x1=1, x2=2, x3=3). `eval_tree_array` expects
+# features by rows, so this is a 3-by-1 array.
+test_inputs = jl_array(np.array([[1.0], [2.0], [3.0]]))
+f1_result, _ = SR.eval_tree_array(f1_tree, test_inputs, model.julia_options_)
+shared_result, _ = SR.eval_tree_array(shared_tree, test_inputs, model.julia_options_)
+
+print(f"f1 at (1,2,3): {f1_result[0]}")  # Intended target term: x2^2 = 4.0
+print(f"shared at (1,2,3): {shared_result[0]}")  # Intended shared term: exp(1) ≈ 2.718
+```
+
+## Recovering a magnetic field from force measurements
+
+The force law is fixed in this example, while its coefficient functions are unknown.
+A charged particle in a viscous medium follows
+
+$$ F = -\eta(T),v + v \times B(t), $$
+
+The data provide $(t, v, T)$ and the resulting force. The template fixes the drag and
+cross-product assembly and leaves, as learnable holes, the three components of $B(t)$
+and the temperature-dependent drag scale $\eta(T)$.
+
+Each target is a three-component value, so the example defines a `Force` type with three
+fields. Pairing `TypeSpec` with `TemplateExpressionSpec` lets `PySRRegressor` pass these
+custom values through the fit while the template constructs each force from the known law.
+Here the template reads the `.x` field from each returned hole; the other fields remain
+part of the `Force` representation.
+
+The complete runnable script is `examples/magnetic_field.py`; the blocks below expose its
+data and model definitions in the same order.
+
+Each scalar input is embedded as a diagonal `Force`, with the same value in each of the
+three fields. The output remains a full three-component force. This lets the template recover
+scalar inputs from `.x` while keeping one custom value type for both `X` and `y`:
+
+`TypeSpec` converts each tuple in these object arrays into the generated `Force` using the
+declared field order (`x`, `y`, `z`), so Python does not need to call `Force(...)` directly.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TemplateExpressionSpec, TypeSpec
+
+OMEGA = 2 * np.pi
+
+
+def experiments(n, seed):
+    rng = np.random.default_rng(seed)
+    T = 298.15 + 0.5 * rng.random(n)
+    t = 10.0 * rng.random(n)
+    v = 2.0 * rng.random((n, 3)) - 1.0
+    B = np.stack([np.sin(OMEGA * t), np.cos(OMEGA * t), np.exp(-t / 10.0)], axis=1)
+    F = -1e-5 * np.sqrt(T)[:, None] * v + np.cross(v, B)
+    return np.column_stack([t, v[:, 0], v[:, 1], v[:, 2], T]), F
+
+
+def as_forces(rows):
+    """An (n, 3) float array as a column of n Force values."""
+    out = np.empty(len(rows), dtype=object)
+    out[:] = [tuple(map(float, row)) for row in rows]
+    return out
+
+
+def on_diagonal(columns):
+    out = np.empty(columns.shape, dtype=object)
+    for j in range(columns.shape[1]):
+        out[:, j] = as_forces(np.repeat(columns[:, j, None], 3, axis=1))
+    return out
+
+
+INPUTS, FORCES = experiments(1000, seed=0)
+X = on_diagonal(INPUTS)
+y = as_forces(FORCES)
+variable_names = ["t", "v_x", "v_y", "v_z", "T"]
+
+HELD_OUT_INPUTS, HELD_OUT_FORCES = experiments(500, seed=12345)
+HELD_OUT_X = on_diagonal(HELD_OUT_INPUTS)
+```
+
+`FORCE` declares the three fields and the hooks that control sampling, constant
+optimization, string output, and failed evaluation. `sample` draws a value for each
+field. The paired `scalar_constants` and `with_scalar_constants` hooks expose and restore
+all three components, so every `Force` constant is a vector. `init_invalid` supplies a
+`Force` with `NaN` in every field. No explicit `is_valid` is given, so the
+default finite-constant check rejects that value:
+
+```python
+from pysr import TypeSpec
+
+FORCE = TypeSpec(
+    "Force",
+    fields={"x": "Float64", "y": "Float64", "z": "Float64"},
+    sample="rng -> Force(randn(rng, 3)...)",
+    definitions="""
+        Base.sin(a::Force)::Force = Force(sin(a.x), sin(a.y), sin(a.z))
+        Base.cos(a::Force)::Force = Force(cos(a.x), cos(a.y), cos(a.z))
+        function Base.sqrt(a::Force)::Force
+            f(v) = v < 0 ? NaN : sqrt(v)
+            return Force(f(a.x), f(a.y), f(a.z))
+        end
+        Base.exp(a::Force)::Force = Force(exp(a.x), exp(a.y), exp(a.z))
+        Base.:+(a::Force, b::Force)::Force = Force(a.x + b.x, a.y + b.y, a.z + b.z)
+        Base.:-(a::Force, b::Force)::Force = Force(a.x - b.x, a.y - b.y, a.z - b.z)
+        Base.:*(a::Force, b::Force)::Force = Force(a.x * b.x, a.y * b.y, a.z * b.z)
+        Base.:/(a::Force, b::Force)::Force = Force(a.x / b.x, a.y / b.y, a.z / b.z)
+    """,
+    scalar_constants="value -> [value.x, value.y, value.z]",
+    with_scalar_constants="(value, c) -> Force(c[1], c[2], c[3])",
+    string="value -> sprint(show, (value.x, value.y, value.z); context = :compact => true)",
+    init_invalid="() -> Force(NaN, NaN, NaN)",
+)
+```
+
+`definitions` runs after the `Force` type is generated, so its Julia methods can return
+`Force` values. The guarded `sqrt` returns `NaN` for negative fields instead of throwing.
+Register the methods by arity and define a loss over all three force components:
+
+```python
+OPERATORS = {
+    1: [
+        "Base.sin",
+        "Base.cos",
+        "Base.sqrt",
+        "Base.exp",
+    ],
+    2: [
+        "Base.:+",
+        "Base.:-",
+        "Base.:*",
+        "Base.:/",
+    ],
+}
+
+FORCE_LOSS = "force_loss(a::Force, b::Force)::Float64 = (a.x - b.x)^2 + (a.y - b.y)^2 + (a.z - b.z)^2"
+```
+
+Inside a template `combine`, PySR's backend wraps input columns and named-hole results in
+`ValidVector` values. The wrapper exposes `.x` for raw values and `.valid` for evaluation
+status; `ValidVector(raw, valid)` constructs a wrapper for a new result. This type is supplied
+by the template runtime rather than defined in this example.
+
+`PHYSICS` checks the hole results for validity, then assembles one `Force` per row
+using the fixed cross product and drag law:
+
+```python
+from pysr import TemplateExpressionSpec
+
+PHYSICS = r"""
+begin
+    _B_x = B_x(t)
+    _B_y = B_y(t)
+    _B_z = B_z(t)
+    _F_d_scale = F_d_scale(T)
+    if !(_B_x.valid && _B_y.valid && _B_z.valid && _F_d_scale.valid)
+        return ValidVector(_B_x.x, false)
+    end
+    F = map(_B_x.x, _B_y.x, _B_z.x, _F_d_scale.x,
+            v_x.x, v_y.x, v_z.x) do bx, by, bz, fd, ux, uy, uz
+        b1, b2, b3 = bx.x, by.x, bz.x
+        u1, u2, u3 = ux.x, uy.x, uz.x
+        s = fd.x
+        Force(u2 * b3 - u3 * b2 + s * u1,
+              u3 * b1 - u1 * b3 + s * u2,
+              u1 * b2 - u2 * b1 + s * u3)
+    end
+    ValidVector(F, true)
+end
+"""
+
+STRUCTURE = TemplateExpressionSpec(
+    combine=PHYSICS,
+    expressions=["B_x", "B_y", "B_z", "F_d_scale"],
+    variable_names=variable_names,
+)
+```
+
+The field holes receive only `t`; `F_d_scale` receives only `T`. Only the `.x` fields
+of their `Force` values enter the numerical residual. The `.y` and `.z` fields can still
+affect whether intermediate values remain valid.
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=FORCE,
+    expression_spec=STRUCTURE,
+    operators=OPERATORS,
+    elementwise_loss=FORCE_LOSS,
+    niterations=100,
+    verbosity=0,
+    random_state=0,
+)
+
+model.fit(X, y, variable_names=variable_names)
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+An example fitted expression is:
+
+```
+B_x = sin(#1 / (0.159155, 6.43746, -0.55788))
+B_y = cos(#1 / (0.159155, 6.43746, -0.55788))
+B_z = exp(#1 * (-0.1, -0.334652, -1.00446))
+F_d_scale = -0.000172745, 0.262294, 0.471951
+```
+
+`#1` is the first argument passed to each hole: `t` for the field components and
+`T` for the drag scale. Constants print three entries because they are full `Force`
+values. The field expressions match the sinusoidal and exponential forms used to
+generate the data; the constant drag scale only approximates the temperature-dependent law.
+
+The script validates force predictions on independently generated experiments with
+`held_out_error(model)`. Accurate force predictions alone do not establish exact
+recovery of every coefficient function. Expect an expensive search: a run took about
+1.5 hours in the recorded full-vector configuration.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/objectives.md
+---
+# Objectives and losses
+
+## Custom objectives
+
+`loss_function` gives the objective the candidate's expression tree. Use it when the score needs to manipulate the tree or read dataset-level information. Use `loss_function_expression` when the score needs the complete expression object. Both modes accept Julia source with one of the signatures below.
+
+```julia
+objective(tree_or_expression, dataset, options)
+objective(tree_or_expression, dataset, options, idx=nothing)
+```
+
+With three arguments, the objective sees the dataset given to the current evaluation. Automatic batching makes that dataset the active batch. A method with `idx=nothing` can receive the full dataset and the selected row indices, allowing the objective to slice the rows itself.
+
+The following objective reproduces ordinary unweighted mean squared error, while retaining access to the optional batch indices:
+
+```python
+from pysr import PySRRegressor
+
+objective = """
+function mse_objective(tree, dataset::Dataset{T,L}, options, idx=nothing)::L where {T,L}
+    X = idx === nothing ? dataset.X : dataset.X[:, idx]
+    y = idx === nothing ? dataset.y : dataset.y[idx]
+    prediction, complete = eval_tree_array(tree, X, options)
+    complete || return L(Inf)
+    return sum(abs2, prediction .- y) / length(y)
+end
+"""
+
+model = PySRRegressor(
+    loss_function=objective,
+    binary_operators=["+", "-", "*", "/"],
+)
+```
+
+`eval_tree_array` returns a completion flag with the predictions. Check that flag before using the array and assign an infinite, or suitably large, loss to an incomplete evaluation. Return the dataset's loss type `L`; it must remain real even when the data type `T` is complex.
+
+PySR imports `SymbolicRegression` into Julia before evaluating these source strings, making `Dataset` and `eval_tree_array` available without another import.
+
+A full objective can also attach a different meaning to the stored tree. Here the two children of a binary root supply the numerator and denominator, forming the rational function $P(X)/Q(X)$. The fully qualified `DE.get_child` calls below access the backend's tree interface.
+
+```python
+from pysr import PySRRegressor
+
+objective = """
+function rational_objective(tree, dataset::Dataset{T,L}, options, idx=nothing)::L where {T,L}
+    tree.degree == 2 || return L(Inf)
+    X = idx === nothing ? dataset.X : dataset.X[:, idx]
+    y = idx === nothing ? dataset.y : dataset.y[idx]
+
+    numerator = SymbolicRegression.InterfaceDynamicExpressionsModule.DE.get_child(tree, 1)
+    denominator = SymbolicRegression.InterfaceDynamicExpressionsModule.DE.get_child(tree, 2)
+    p, p_complete = eval_tree_array(numerator, X, options)
+    q, q_complete = eval_tree_array(denominator, X, options)
+    p_complete && q_complete || return L(Inf)
+
+    prediction = p ./ q
+    return sum(abs2, prediction .- y) / length(y)
+end
+"""
+
+model = PySRRegressor(
+    loss_function=objective,
+    binary_operators=["+", "-"],
+)
+```
+
+This objective ignores the root operator and interprets only its two children. The equation table displays the stored tree. `predict` and symbolic export likewise retain the raw tree and cannot automatically reconstruct the quotient. Keep the objective source and apply the child transformation yourself whenever you evaluate the selected equation.
+
+## Writing the objective in Python
+
+The objective itself can live in Python while Julia supplies a thin shim. The search releases Python's global interpreter lock (GIL) while it runs, so the shim reacquires the lock, calls the Python function, and converts its scalar result to the dataset's loss type. The Python function receives the tree, dataset, and options as Julia objects, and it can call back into Julia, including `eval_tree_array`:
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, jl
+
+
+def python_objective(tree, dataset, options):
+    prediction, completed = jl.SymbolicRegression.eval_tree_array(
+        tree, dataset.X, options
+    )
+    if not completed:
+        return float("inf")
+
+    prediction = np.asarray(prediction)
+    target = np.asarray(dataset.y)
+    return float(np.mean((prediction - target) ** 2))
+
+
+jl.python_objective = python_objective
+
+jl.seval("""
+using PythonCall
+
+function python_objective_shim(
+    tree, dataset::Dataset{T,L}, options
+)::L where {T,L}
+    PythonCall.GIL.@lock begin
+        return pyconvert(L, python_objective(tree, dataset, options))
+    end
+end
+""")
+
+model = PySRRegressor(
+    loss_function="python_objective_shim",
+    precision=64,
+)
+```
+
+`precision=64` makes the data and loss use `Float64`, matching the Python float returned by this objective.
+
+Use this bridge when the objective needs Python-specific logic. Every evaluation crosses the Julia/Python boundary, and concurrent callbacks serialize on the GIL. Keep throughput-sensitive objectives in Julia.
+
+## Swinging up a cart-pole with a rollout objective
+
+A supervised example gives a target for each row. A control policy has no label of that kind for its force: a force is good only if the subsequent trajectory is good. `loss_function_expression` provides the candidate expression to a rollout objective that can evaluate it throughout the closed loop. This example runs 500 steps from each of 16 training starts and returns the negative mean reward per step. Most of the starts leave the pole hanging down, so the expression must swing it up, catch it, and balance it with one closed-form policy.
+
+### The plant and what the policy sees
+
+The implemented plant uses a $1.0,\mathrm{kg}$ cart and a $0.1,\mathrm{kg}$ pole with half-length $0.5,\mathrm{m}$, gravity $9.8$, and semi-implicit Euler integration with $dt=0.02,\mathrm{s}$. Its 500-step horizon is therefore $10,\mathrm{s}$. The policy output is clipped to `[-1, 1]` and multiplied by $10,\mathrm{N}$. The five inputs are scaled cart position, scaled cart speed, $\sin\theta$, $\cos\theta$, and scaled pole rate. The sine/cosine pair avoids the wrap discontinuity at $\pm\pi$, while the cosine input `c` supplies a direct uprightness signal.
+
+```python
+import numpy as np
+
+M_C, M_P, LENGTH, GRAVITY = 1.0, 0.1, 0.5, 9.8
+FORCE_CAP, DT = 10.0, 0.02
+RAIL, V_SCALE, OMEGA_SCALE = 2.4, 4.0, 8.0
+HORIZON = 500  # 10 s of control at dt = 0.02
+
+
+def step(state, force):
+    x, v, theta, omega = state.T
+    total = M_C + M_P
+    sin, cos = np.sin(theta), np.cos(theta)
+    q = (force + M_P * LENGTH * omega**2 * sin) / total
+    theta_dd = (GRAVITY * sin - cos * q) / (LENGTH * (4 / 3 - M_P * cos**2 / total))
+    x_dd = q - M_P * LENGTH * theta_dd * cos / total
+    v, omega = v + DT * x_dd, omega + DT * theta_dd
+    return np.stack([x + DT * v, v, theta + DT * omega, omega], axis=-1)
+```
+
+Use the initial-state arrays and `observe` helper in `examples/cartpole_objective.py` to construct `X`. Its columns contain the five policy observations, and `y` is a zero placeholder that the objective ignores. The 16 training starts cover hanging, horizontal, and near-upright states; the 64 held-out starts use wider ranges of position, speed, angle, and pole rate.
+
+### The reward
+
+At each step, the objective accumulates the reward
+
+$$ r = 2\cos\theta - 0.05,x^2 - 0.01\left(\frac{F}{10}\right)^2 - 0.005\left(\frac{F - F\_{\text{prev}}}{10}\right)^2 $$
+
+The upright term contributes up to 2 per step. The remaining terms penalize, in order, cart displacement, normalized actuator force, and normalized force changes. Here $F$ is the clipped force and $F\_{\mathrm{prev}}$ is the preceding force. The objective returns the negative mean of $r$ over 500 steps and 16 starts, so an upright stationary policy has loss near $-2$.
+
+The complete objective source is defined in `examples/cartpole_objective.py` as the Python string `CARTPOLE_REWARD`. The block below shows its Julia function body and abbreviates the state unpacking, observation-buffer setup, integration step, and divergence check supplied by that script. Treat it as a behavior excerpt, not a standalone definition.
+
+```julia
+function cartpole_reward(ex, dataset::Dataset{T,L}, options)::L where {T,L}
+    n = size(dataset.X, 2)
+    # ... unpack x, v, theta, omega from the observation columns ...
+    for _ in 1:500
+        # ... refill obs from the current state ...
+        raw, ok = eval_tree_array(ex, obs, options)
+        (ok && length(raw) == n && all(isfinite, raw)) || return L(Inf)
+
+        force = 10.0 .* clamp.(raw, -1.0, 1.0)
+        earned += sum(
+            2.0 .* cos_t .- 0.05 .* x .^ 2 .-
+            0.01 .* (force ./ 10.0) .^ 2 .-
+            0.005 .* ((force .- previous) ./ 10.0) .^ 2
+        )
+        previous = force
+        # ... one semi-implicit Euler step, then the divergence check ...
+    end
+    return L(-earned / (500 * n))
+end
+```
+
+Invalid evaluations and divergent trajectories receive a penalty.
+
+### The search
+
+```python
+import sympy
+
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    operators={
+        1: ["square", "abs", "tanh"],
+        2: ["+", "-", "*", "/", "max", "min"],
+        3: ["ifelse(t, a, b) = t > 0 ? a : b"],
+    },
+    extra_sympy_mappings={
+        "ifelse": lambda t, a, b: sympy.Piecewise((a, t > 0), (b, True))
+    },
+    loss_function_expression=CARTPOLE_REWARD,
+    loss_scale="linear",  # rewards make the loss negative, which log scaling forbids
+    maxsize=28,
+    maxdepth=10,
+    parsimony=0.001,
+    niterations=120,
+    populations=32,
+    population_size=64,
+    random_state=0,
+)
+model.fit(X, y, variable_names=["x_n", "v_n", "s", "c", "omega_n"])
+```
+
+`loss_scale="linear"` is required here because logarithmic scaling accepts nonnegative losses, including zero, while this reward can make the loss negative. The operator set supplies arithmetic, `max`, and `min`; the user-defined ternary `ifelse` can switch between swing-up and balancing behavior. `extra_sympy_mappings` translates that custom operator to a SymPy `Piecewise` expression for export. The search uses multithreading, so repeated fits can differ even with the same nominal seed.
+
+### Evaluating a policy
+
+One controller returned by the search is:
+
+```
+(tanh(((0.46341985 * v_n) + (omega_n + (s + omega_n))) / 0.00043365502) - v_n) / 0.97654253
+```
+
+A low training loss alone does not establish successful swing-up from new initial states. In `examples/cartpole_objective.py`, `mean_rewards(model, HELD_OUT_STARTS, index=...)` evaluates a selected equation on the wider held-out set, and `check(model)` requires positive mean reward on every start. Use these rollout checks when choosing a policy.
+
+Allow roughly two hours for the search configuration above. The complete runnable example is `examples/cartpole_objective.py`.
+
+## Inventing a pseudorandom generator with no target
+
+Ordinary regression supplies `y` and compares every candidate output with a target. This example instead searches for a 32-bit state update $x \mapsto f(x)$ whose iterates have specified properties. Its score comes from how the map behaves, so the objective defines what counts as a good generator without consulting a target array.
+
+The data rows provide 32 random nonzero seeds. `y` is a zero column retained for the estimator interface; the objective never reads it.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TypeSpec
+
+WIDTH = 32
+SEEDS = [int(v) for v in np.random.default_rng(0).integers(1, 1 << WIDTH, size=32)]
+X = np.empty((len(SEEDS), 1), dtype=object)
+for i, seed in enumerate(SEEDS):
+    X[i, 0] = seed
+y = np.zeros(len(SEEDS), dtype=object)
+```
+
+Each state is an unsigned 32-bit word, wrapped in a Julia type. The `shl` and `shr` operators below pass their `UInt32` shift count directly; this example does not mask counts into `0:31`, so arbitrary sampled counts follow Julia's shift semantics and bits shifted out of the 32-bit word are discarded. The operations do not rotate the state. The `sample` hook favors values from 0 through 31 because those are common shift distances, while still sampling arbitrary `UInt32` values. Half of mutations flip a single bit, allowing a local change to a tap constant; the other half adds either 1 or `typemax(UInt32)`. The `string` hook displays values below 32 in decimal and larger words as eight hexadecimal digits.
+
+```python
+from pysr import TypeSpec
+
+SPEC = TypeSpec(
+    "Word",
+    fields={"bits": "UInt32"},
+    sample="rng -> Word(rand(rng, Bool) ? rand(rng, UInt32(0):UInt32(31)) : rand(rng, UInt32))",
+    mutate="(rng, value, temperature) -> Word(rand(rng, Bool) ? xor(value.bits, UInt32(1) << rand(rng, 0:31)) : value.bits + rand(rng, (UInt32(1), typemax(UInt32))))",
+    string='value -> value.bits < UInt32(32) ? string(value.bits) : "0x" * string(value.bits, base = 16, pad = 8)',
+    loss_type="Float64",
+)
+```
+
+The operators form a restricted bitwise instruction set: complement, XOR, AND, OR, left shift, and right shift. The search excludes arithmetic and floating-point operations.
+
+### What the objective scores
+
+`examples/prng_period.py` defines the objective as a Julia source string named `PRNG_LOSS`. It includes the period-certificate implementation used below.
+
+For every candidate, the objective walks 256 steps from each seed and adds six terms that penalize departures from their desired properties:
+
+* `period` is $1 - \log_2(\mathrm{proven})/32$, with `proven` equal to the certified orbit length when certification succeeds.
+* `balance` is the mean squared bias of each bit column away from one half.
+* `autocorr` is the mean squared normalized self-correlation of each bit column at lags 1, 2, 3, and 5.
+* `diffusion` penalizes an average of fewer than four changed output bits when each input bit is flipped on a fixed probe set.
+* `edge` penalizes output bits that respond to fewer than two distinct input-bit flips across that probe set.
+* `shear` measures correlations between bit `b` and shifted bit `b + d` at one- and two-step lags, for nonzero shifts `d` from -3 to 3. It keeps a plain shift from receiving a good score.
+
+### Certifying a period of four billion without walking it
+
+The requested nonzero orbit contains $2^{32}-1 = 4{,}294{,}967{,}295$ states, so a direct walk is impractical. The certificate evaluates the candidate at three groups of inputs: zero, all 32 basis states, and 32 fixed probes. It requires zero to map to zero and the image of each probe to agree with the matrix assembled from the basis images. These finite checks only screen for GF(2) linearity on the supplied evidence; they do not prove global linearity for an arbitrary expression.
+
+A successful certificate gives the candidate's period provided the expression is globally GF(2)-linear. If certification fails, the objective uses the orbit length observed during the finite walk. The period-checking implementation is in `examples/prng_period.py`.
+
+### Settings
+
+The settings below pass the source-defined `PRNG_LOSS` objective to PySR:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=SPEC,
+    operators={
+        1: ["bnot(a::Word) = Word(~a.bits)"],
+        2: [
+            "bxor(a::Word, b::Word) = Word(xor(a.bits, b.bits))",
+            "band(a::Word, b::Word) = Word(a.bits & b.bits)",
+            "bor(a::Word, b::Word) = Word(a.bits | b.bits)",
+            "shl(a::Word, b::Word) = Word(a.bits << b.bits)",
+            "shr(a::Word, b::Word) = Word(a.bits >> b.bits)",
+        ],
+    },
+    loss_function=PRNG_LOSS,
+    batching=False,
+    maxsize=20,
+    populations=8,
+    population_size=30,
+    ncycles_per_iteration=30,
+    niterations=800,
+    random_state=0,
+    verbosity=0,
+)
+model.fit(X, y, variable_names=["x"])
+```
+
+Keep `batching=False` because the objective walks every seed; a minibatch would score a different problem. Each candidate requires a 256-step walk over all 32 seeds. Allow about an hour for this search.
+
+### Results
+
+The script's `check(model)` looks for a front member that passes a separate finite linearity screen and whose inferred GF(2) matrix has order $2^{32}-1$. As with the objective's certificate, this establishes the candidate's period only if the expression is globally GF(2)-linear.
+
+One recovered expression is:
+
+```
+bxor(shl(x, 1), bxor(shr(bxor(shr(x, 1), x), 1), band(x, 0xffffffe3)))
+```
+
+Fixed shifts, XOR, and AND with a constant mask make this expression globally linear by construction. For such a map, matrix order $2^{32}-1$ implies that every nonzero word lies on one orbit of that length. The remaining score terms assess the generator's finite-sample balance, correlations, and diffusion.
+
+The complete runnable example is `examples/prng_period.py`.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/physics.md
+---
+# Physics and units
+
+## Dimensional constraints
+
+Dimensional constraints let PySR use physical units during symbolic search. When the units of the features and target are known, pass a unit expression for each feature and one for the target so candidates with mismatched dimensions receive a penalty.
+
+The fit interface follows the unit syntax of `DynamicQuantities.jl`. The following example uses Astropy to sample a mass $M$, a test mass $m$, and a separation $r$, then evaluates Newton's inverse-square law $F = GMm/r^2$.
+
+```python
+import numpy as np
+from astropy import units as u, constants as const
+
+M = (np.random.rand(100) + 0.1) * const.M_sun
+m = 100 * (np.random.rand(100) + 0.1) * u.kg
+r = (np.random.rand(100) + 0.1) * const.R_earth
+G = const.G
+
+F = G * M * m / r**2
+```
+
+The force values span a wide range. This loss compares their magnitudes in logarithmic space and penalizes a wrong sign:
+
+```python
+elementwise_loss = """function loss_fnc(prediction, target)
+    scatter_loss = abs(log((abs(prediction)+1f-20) / (abs(target)+1f-20)))
+    sign_loss = 10 * (sign(prediction) - sign(target))^2
+    return scatter_loss + sign_loss
+end
+"""
+```
+
+`dimensional_constraint_penalty` adds a cost when a candidate fails dimensional analysis:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["square"],
+    elementwise_loss=elementwise_loss,
+    complexity_of_constants=2,
+    maxsize=25,
+    niterations=100,
+    populations=50,
+    # Amount to penalize dimensional violations:
+    dimensional_constraint_penalty=10**5,
+)
+```
+
+Pass numeric values to `fit`, with matching units in column order through `X_units` and the target unit through `y_units`. Unit strings follow the Julia syntax documented by [DynamicQuantities.jl](https://ai.damtp.cam.ac.uk/dynamicquantities/dev/#Usage).
+
+```python
+import pandas as pd
+
+# Get numerical arrays to fit:
+X = pd.DataFrame(dict(
+    M=M.to("M_sun").value,
+    m=m.to("kg").value,
+    r=r.to("R_earth").value,
+))
+y = F.value
+
+model.fit(
+    X,
+    y,
+    X_units=["Constants.M_sun", "kg", "Constants.R_earth"],
+    y_units="kg * m / s^2"
+)
+```
+
+The loss is nonnegative, and the dimensional penalty is additive. A candidate with total loss below that penalty therefore did not receive the dimensional-violation charge and is dimensionally consistent for the supplied units. The marker `"[⋅]"` denotes a constant whose units remain free. The unit-aware form below illustrates this notation: `M[kg]` supplies mass, so the constant supplies the acceleration units needed for the target:
+
+```julia
+"y[m s⁻² kg] = (M[kg] * 2.6353e-22[⋅])"
+```
+
+Set `dimensionless_constants_only=True` to restrict fitted constants to dimensionless quantities.
+
+## Using differential operators
+
+A [`TemplateExpressionSpec`](/examples/expression-specifications) can include differential operators in its `combine` string. `D` takes the expression to differentiate and an argument index. Here, `D(f, 1)` differentiates the learned function `f` with respect to its first argument, and `df(x)` evaluates that derivative. Matching those values to data turns antiderivative discovery into regression.
+
+The regression target is the integrand $1/(x^2\sqrt{x^2 - 1})$ on $x > 1$. The template searches for a function $f$ whose derivative matches samples of the integrand, leaving an additive constant undetermined.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TemplateExpressionSpec
+
+x = np.random.uniform(1, 10, (1000,))  # Integrand sampling points
+y = 1 / (x**2 * np.sqrt(x**2 - 1))     # Evaluation of the integrand
+
+expression_spec = TemplateExpressionSpec(
+    expressions=["f"],
+    variable_names=["x"],
+    combine="df = D(f, 1); df(x)",
+)
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["sqrt"],
+    expression_spec=expression_spec,
+    maxsize=20,
+)
+model.fit(x[:, np.newaxis], y)
+```
+
+The target antiderivative is $f(x) = \frac{\sqrt{x^2 - 1}}{x}$, up to an additive constant.
+
+## Discovering a PDE
+
+For a field $u(x,t)$ sampled on a space-time grid, each point becomes one regression row: its field value and spatial derivatives are features, and its time derivative is the target. PySR then searches for the right-hand side in $u_t = f(u, u_x, u\_{xx}, \ldots)$.
+
+The following example simulates the viscous Burgers equation $u_t = -u,u_x + 0.1,u\_{xx}$ on a periodic domain. Measurements of the field can replace the simulation when they are arranged into the same feature and target arrays.
+
+```python
+import numpy as np
+
+L, nx, nu = 2 * np.pi, 128, 0.1
+x = np.linspace(0.0, L, nx, endpoint=False)
+dx = L / nx
+k = 2 * np.pi * np.fft.rfftfreq(nx, d=dx)
+
+def d_dx(u, order=1):
+    return np.real(np.fft.irfft((1j * k) ** order * np.fft.rfft(u), n=nx))
+
+def rhs(u):
+    return -u * d_dx(u) + nu * d_dx(u, order=2)
+
+u = -np.sin(x)
+snapshots = [u.copy()]
+dt = 1e-3
+for i in range(1, 4001):
+    k1 = rhs(u)
+    k2 = rhs(u + 0.5 * dt * k1)
+    k3 = rhs(u + 0.5 * dt * k2)
+    k4 = rhs(u + dt * k3)
+    u = u + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+    if i % 100 == 0:
+        snapshots.append(u.copy())
+
+U = np.array(snapshots)   # shape (41, 128)
+t = np.arange(U.shape[0]) * 0.1
+```
+
+Estimate spatial derivatives with the smoothing differentiator `savgol_filter` and time derivatives with `np.gradient`. Supply the coordinate spacings and keep each space-time point aligned across the feature columns and target:
+
+```python
+import numpy as np
+
+from scipy.signal import savgol_filter
+
+ux = savgol_filter(U, 21, 3, deriv=1, delta=dx, axis=-1)
+uxx = savgol_filter(U, 21, 3, deriv=2, delta=dx, axis=-1)
+ut = np.gradient(U, t, axis=0)
+
+X = np.stack([U, ux, uxx], axis=-1).reshape(-1, 3)
+y = ut.reshape(-1)
+```
+
+`complexity_of_variables=[1, 2, 3]` makes higher spatial derivatives more expensive, biasing the search toward lower-order terms when candidate fits compete. A successful low-complexity search should place $0.1,u\_{xx} - u,u_x$ on the Pareto front, matching the right-hand side that generated the snapshots.
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*"],
+    complexity_of_variables=[1, 2, 3],
+    maxsize=20,
+    niterations=100,
+)
+model.fit(X, y, variable_names=["u", "u_x", "u_xx"])
+print(model)
+```
+
+The regression uses estimated derivatives, so simulate the discovered PDE forward from a held-out initial condition before relying on its coefficients.
+
+If the field $u$ has units $\mathrm{m,s^{-1}}$, then $u_x$ has units $\mathrm{s^{-1}}$, $u\_{xx}$ has units $\mathrm{m^{-1},s^{-1}}$, and $u_t$ has units $\mathrm{m,s^{-2}}$. For this feature order, pass the corresponding strings through `X_units=["m/s", "s^-1", "m^-1*s^-1"]` and `y_units="m*s^-2"`.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/search-behaviour.md
+---
+# Search behaviour
+
+## Automatic batching on a large dataset
+
+`batching` reduces the rows used to score population members during evolution. Hall-of-fame comparisons continue to use every row. With `batching=False`, every evolutionary comparison uses all rows. When `batch_size` is `None`, automatic batching can use every row on small datasets. PySR chooses all rows through 1000, 128 below 5000, 256 below 50,000, and 512 from 50,000 onward. At 20,000 rows, evolution therefore sees 256 rows per comparison, while hall-of-fame scoring sees all 20,000. `batching="auto"` is the default; this example names it to make the choice explicit.
+
+The target depends on two of five input columns. The remaining three inputs act as distractors.
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+X = rng.uniform(-3, 3, (20000, 5))
+y = 2.5382 * np.cos(X[:, 3]) + X[:, 0] ** 2 - 0.5
+```
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["cos", "exp"],
+    batching="auto",
+    niterations=40,
+    verbosity=0,
+    random_state=0,
+)
+model.fit(X, y, variable_names=["x0", "x1", "x2", "x3", "x4"])
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+One recovered expression is:
+
+```
+(cos(x3) * 2.5382) + ((x0 * x0) + -0.5)
+```
+
+Run the complete example with `examples/automatic_batching.py`.
+
+## Operators of any arity
+
+The generic `operators` argument defines an expression grammar by arity. Each integer key gives the number of arguments accepted by the operators listed under it, so one search can mix unary and binary operations with ternary or wider functions. `operators` cannot be combined with `binary_operators` or `unary_operators`.
+
+The target is a four-way minimum,
+
+$$
+y = \min(x + 2,; 2 - x,; \sin(3x) + 1.2,; 0.8).
+$$
+
+A binary `min` would write this reduction as three nested calls. The custom `min4` writes the same mathematical operation in one call, giving the search a shorter structural route to the target.
+
+```python
+import numpy as np
+
+DOMAIN = (-4.0, 4.0)
+
+
+def envelope(x):
+    return np.minimum.reduce(
+        [x + 2.0, 2.0 - x, np.sin(3.0 * x) + 1.2, np.full_like(x, 0.8)]
+    )
+
+
+_x = np.sort(np.random.default_rng(0).uniform(*DOMAIN, 400))
+X = _x.reshape(-1, 1).astype(np.float32)
+y = envelope(_x).astype(np.float32)
+
+_unseen = np.linspace(*DOMAIN, 4001)
+X_UNSEEN = _unseen.reshape(-1, 1).astype(np.float32)
+Y_UNSEEN = envelope(_unseen)
+```
+
+Custom operator definitions are Julia source strings under their arity keys. A SymPy-capable model also needs a matching entry in `extra_sympy_mappings`; PySR rejects a named custom function during setup when its symbolic image is missing. The mappings here provide the `Piecewise` representation for `ifelse` and the `Min` representation for `min4`.
+
+```python
+import sympy
+
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    operators={
+        1: ["sin", "cos"],
+        2: ["+", "-", "*"],
+        3: ["ifelse(t, a, b) = t > 0 ? a : b"],
+        4: ["min4(a, b, c, d) = min(a, b, c, d)"],
+    },
+    # A custom operator is rejected at fit time unless it has a SymPy image.
+    extra_sympy_mappings={
+        "ifelse": lambda t, a, b: sympy.Piecewise((a, t > 0), (b, True)),
+        "min4": lambda a, b, c, d: sympy.Min(a, b, c, d),
+    },
+    niterations=500,
+    random_state=0,
+)
+model.fit(X, y, variable_names=["x"])
+print(model.equations_)
+```
+
+One recovered expression is:
+
+```
+min4(0.8, 2.0 - x, 2.0 + x, 1.1999999 + sin(x * 3.0))
+```
+
+The complete example, `examples/any_arity.py`, checks predictions on an unseen grid with `model.predict(X_UNSEEN, index=i)` for each candidate equation.
+
+## Mutations and plugins
+
+PySR accepts mutation and plugin configuration as `PySRRegressor` arguments. `mutations` maps mutation entries to weights, and `plugins` lists plugin entries. Entries merge with shipped defaults by concrete type: a matching type replaces the default entry, while a new type is appended alongside it. This lets one behavior change without reproducing the complete default set.
+
+The following configuration activates Backsolve and names the adaptive mutation-weight plugin.
+
+```python
+from pysr import (
+    AdaptiveMutationWeightsPlugin,
+    BacksolveMutation,
+    PySRRegressor,
+)
+
+model = PySRRegressor(
+    mutations={BacksolveMutation(): 0.1},
+    plugins=[AdaptiveMutationWeightsPlugin()],
+)
+```
+
+`BacksolveMutation` is present at default weight 0.0, so it is available without being sampled. Assigning weight 0.1 makes it eligible for this search. Backsolve inverts the operators above a selected subtree and fits a replacement from expressions already in the population, helping an additive target assemble from separately discovered pieces.
+
+`AdaptiveMutationWeightsPlugin` is part of the default plugin set. It updates mutation weights from observed improvement rates and resets its runtime state for each `fit`. Naming it in `plugins` replaces the existing entry of that type, which is also where `smoothing`, `floor`, and `reward` can be changed. The resolved list keeps simulated annealing and adaptive parsimony alongside adaptive mutation weights. The two settings work together: the mutation weight makes Backsolve eligible, and the adaptive plugin can change how much of the mutation budget each kind receives.
+
+The runnable configuration uses the small target
+
+$$ y = 2.5\cos(3x) + 0.5x^2 - 1. $$
+
+```python
+import numpy as np
+
+x = np.linspace(-3.0, 3.0, 200)
+X = x.reshape(-1, 1)
+y = 2.5 * np.cos(3.0 * x) + 0.5 * x * x - 1.0
+```
+
+```python
+from pysr import AdaptiveMutationWeightsPlugin, BacksolveMutation, PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*"],
+    unary_operators=["cos", "exp"],
+    niterations=20,
+    verbosity=0,
+    mutations={BacksolveMutation(): 0.1},
+    plugins=[AdaptiveMutationWeightsPlugin()],
+    random_state=0,
+)
+model.fit(X, y, variable_names=["x"])
+print(model.equations_)
+```
+
+After fitting, inspect `model.julia_options_.mutations` to see the resolved entries and weights. Run the example with `examples/mutations_and_plugins.py`.
+
+## Adaptive mutation weights
+
+`AdaptiveMutationWeightsPlugin` adjusts mutation weights from their observed success rates. It is enabled by default, and its learned state resets on each `fit`. Pass an instance through `plugins` to change its settings.
+
+* `smoothing` controls the exponential moving average of success rates.
+* `floor` limits the success-rate ratio used to update a multiplier to $\[\text{floor}, 1/\text{floor}]$.
+* `reward` selects whether improvement is measured by `"cost"` or `"loss"`.
+
+This example fits a cosine and a quadratic term:
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(20260817)
+X = rng.uniform(-3.0, 3.0, size=(200, 5))
+y = 2.5382 * np.cos(X[:, 3]) + X[:, 0] ** 2 - 0.5
+```
+
+```python
+from pysr import AdaptiveMutationWeightsPlugin, PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["cos", "exp"],
+    maxsize=14,
+    niterations=300,
+    populations=1,
+    plugins=[AdaptiveMutationWeightsPlugin(smoothing=0.02, floor=0.05, reward="cost")],
+    random_state=0,
+    verbosity=0,
+)
+model.fit(X, y)
+print(model.equations_)
+```
+
+For an optional diagnostic that records mutation counts and learned multipliers, see `examples/adaptive_mutation_weights.py`.
+
+## The backsolve mutation
+
+Ordinary mutations change an expression and test the result. Backsolve chooses a non-root subtree and inverts the operators above it to determine the values that subtree would need to produce. It then fits a sparse replacement from expressions already in the population. Greedy forward selection over a basis library finds the replacement within the remaining complexity budget. The replaced subtree can remain in the library, and rows with invalid inverse values are masked. Both `+` and `*` are required for the weighted sum. An event returns a child only when its cost strictly improves on the parent. Each event requires an inversion and a linear solve, so enabling Backsolve can substantially increase search time.
+
+Backsolve applies to ordinary binary scalar expression trees with a real target vector. It rejects unsupported wrappers, shared nodes, root or single-node choices, missing targets, and missing weighted-sum operators. The mutation is experimental and starts at default weight 0.0.
+
+The target combines an oscillation with a quadratic:
+
+$$ y = 2.5\cos(3x) + 0.5x^2 - 1. $$
+
+```python
+import numpy as np
+
+x = np.linspace(-3.0, 3.0, 200)
+X = x.reshape(-1, 1)
+y = 2.5 * np.cos(3.0 * x) + 0.5 * x * x - 1.0
+```
+
+The example omits division and a power operator, so the quadratic must appear as `x * x`. `precision=64` supports the linear solve, and `maxsize=30` leaves room for the complete form.
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*"],
+    unary_operators=["cos", "exp"],
+    weight_backsolve=1.0,
+    maxsize=30,
+    precision=64,
+    niterations=10,
+    verbosity=0,
+    random_state=0,
+)
+model.fit(X, y, variable_names=["x"])
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+One recovered expression is:
+
+```
+((cos((x + x) + x) * 2.5) + ((x * x) * 0.5)) + -1.0
+```
+
+Check the selected equation against the training target:
+
+```python
+import numpy as np
+
+prediction = np.asarray(model.predict(X), dtype=float)
+print(f"max abs error: {np.max(np.abs(prediction - y)):.3g}")
+```
+
+Use `examples/backsolve_mutation.py` for the complete example.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/instrumentation.md
+---
+# Instrumentation and workflow
+
+## Using TensorBoard for logging
+
+Pass `TensorBoardLoggerSpec` through `logger_spec` to write search progress to TensorBoard. `TensorBoardLoggerSpec` records the model's search hyperparameters and writes scalar summaries for the run. The example uses `min_loss`, which tracks the current best loss, and `pareto_volume`, which summarizes the Pareto front.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TensorBoardLoggerSpec
+
+rstate = np.random.RandomState(42)
+
+# Uniform dist between -3 and 3:
+X = rstate.uniform(-3, 3, (1000, 2))
+y = np.exp(X[:, 0]) + X[:, 1]
+
+# Create a logger that writes to "logs/run*":
+logger_spec = TensorBoardLoggerSpec(
+    log_dir="logs/run",
+    log_interval=10,  # Log every 10 iterations
+)
+
+model = PySRRegressor(
+    binary_operators=["+", "*", "-", "/"],
+    logger_spec=logger_spec,
+)
+model.fit(X, y)
+```
+
+Start TensorBoard with the directory that contains the run logs:
+
+```bash
+tensorboard --logdir logs/
+```
+
+## Recording the genealogy of a search
+
+The complete recorder and post-processing workflow is in `examples/search_trace.py`. `load_trace` and `ancestry` are example-local helpers, not PySR API methods.
+
+Tracing records how a symbolic-regression population changes. Setting `use_tracing=True` activates the optional recorder. PySR loads the required JSON dependency lazily on first use. It then writes JSONL records to `tracing_file`, one for each population at each iteration, with the live members and their mutation, crossover, tuning, and death events. These recorded fields supply the members and parent relationships that the helpers need to reconstruct a graph and one selected path. The helpers work from recorded events and do not expose every historical branch.
+
+With tracing disabled, PySR does not request any trace output or load the tracing dependency.
+
+The target combines one quadratic term, one cosine term, and an offset. The added Gaussian noise has standard deviation equal to $5%$ of the target's spread:
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+X = rng.uniform(-3, 3, size=(200, 3))
+y = 2.5382 * np.cos(X[:, 2]) + X[:, 0] ** 2 - 1.5
+y = y + rng.normal(0, 0.05 * y.std(), size=200)
+```
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["cos", "exp"],
+    population_size=27,
+    populations=8,
+    ncycles_per_iteration=90,
+    maxsize=20,
+    niterations=25,
+    random_state=0,
+    use_tracing=True,
+    tracing_file="search_trace.jsonl",
+)
+model.fit(X, y)
+```
+
+Keep tracing runs short: the files grow with the search, and this `load_trace` helper reads the entire file into memory.
+
+```python
+import json
+import pathlib
+
+def load_trace(trace_path):
+    nodes, edges = {}, []
+    for line in pathlib.Path(trace_path).read_text().splitlines():
+        record = json.loads(line)
+        if record["record_type"] != "iteration":
+            continue
+        for member in record["members"]:
+            nodes.setdefault(member["ref"], {}).update(member)
+        for ref, entry in record["mutations"].items():
+            parent = int(ref)
+            nodes.setdefault(parent, {}).update(
+                {k: entry[k] for k in ("tree", "loss", "cost", "parent") if k in entry}
+            )
+            for event in entry["events"]:
+                kind = event["type"]
+                detail = event.get("mutation") or event.get("details") or {}
+                if kind == "crossover" and event["parent1"] != parent:
+                    continue
+                children = (
+                    (event["child1"], event["child2"])
+                    if kind == "crossover"
+                    else (event["child"],) if "child" in event else ()
+                )
+                for child in children:
+                    edges.append(
+                        dict(
+                            parent=parent,
+                            child=child,
+                            kind=kind,
+                            mutation=detail.get("type"),
+                            result=detail.get("result", "accept"),
+                            mate=event.get("parent2"),
+                        )
+                    )
+    for edge in edges:
+        if (
+            edge["mate"] is not None
+            and nodes.get(edge["child"], {}).get("parent") == edge["mate"]
+        ):
+            edge["parent"], edge["mate"] = edge["mate"], edge["parent"]
+    return nodes, edges
+```
+
+`ancestry` selects the lowest-loss recorded member and follows the first edge for each child. It returns one path, which ends when no edge remains or a reference repeats.
+
+```python
+def ancestry(nodes, edges):
+    first_edge = {}
+    for edge in edges:
+        first_edge.setdefault(edge["child"], edge)
+    winner = min(
+        (ref for ref, n in nodes.items() if n.get("loss") is not None),
+        key=lambda ref: nodes[ref]["loss"],
+    )
+    chain, current, seen = [], winner, set()
+    while current in first_edge and current not in seen:
+        seen.add(current)
+        chain.append(first_edge[current])
+        current = first_edge[current]["parent"]
+    chain.reverse()
+    return winner, chain
+```
+
+Trace records label features `x1`, `x2`, and so on by column order, independently of any `variable_names` passed to the search. Thus `x1` refers to `X[:, 0]`, and `x3` refers to `X[:, 2]` in this example.
+
+Use `examples/search_trace.py` for the complete tracing workflow.
+
+## Closing an agent loop with `guesses=`
+
+The `guesses=` keyword accepts a list of expression strings to seed a fit. An external workflow can inspect `model.equations_`, propose an expression, and pass it into a later search. PySR can then optimize its numeric constants.
+
+This example replays a recorded coding-agent proposal from `PROPOSALS`. The custom `agent(front, tried)` helper returns stored expressions; it does not call a live agent or model service. The complete implementation is in `examples/agent_loop_guesses.py`.
+
+The target is relativistic kinetic energy in natural units, with $c=1$ and speeds up to $0.88c$. Gaussian noise has standard deviation $0.15%$ of the median exact energy. `NOISE_FLOOR` stores its variance for the loop's training-loss stopping rule.
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(42)
+mass = rng.uniform(0.5, 3.0, 160)
+velocity = rng.uniform(0.08, 0.88, 160)
+kinetic_energy_exact = mass * (1 / np.sqrt(1 - velocity**2) - 1)
+NOISE_SIGMA = 0.0015 * float(np.median(kinetic_energy_exact))
+kinetic_energy = kinetic_energy_exact + rng.normal(0.0, NOISE_SIGMA, mass.size)
+NOISE_FLOOR = NOISE_SIGMA**2
+
+X = np.stack([mass, velocity], axis=1)
+y = kinetic_energy
+VARIABLE_NAMES = ["mass", "velocity"]
+```
+
+```python
+from pysr import PySRRegressor
+
+model_kwargs = dict(
+    operators={1: ["sqrt"], 2: ["+", "-", "*", "/"]},
+    niterations=10,
+    verbosity=0,
+)
+```
+
+The proposal uses the known relativistic structure:
+
+```python
+PROPOSALS = ["(mass / sqrt(1 - (velocity * velocity))) - mass"]
+
+def agent(front, tried):
+    print("front handed to the agent:")
+    print(
+        front[["complexity", "loss", "equation"]].to_string(index=False),
+        "\n",
+        flush=True,
+    )
+    return PROPOSALS[len(tried)] if len(tried) < len(PROPOSALS) else None
+```
+
+The loop begins with `guesses=None` and passes each proposal as a one-element list to the next fit. It stops when the minimum training loss reaches `2 * NOISE_FLOOR` or the helper has no proposal left. This threshold is an example-specific stopping rule, not a lower bound on achievable loss.
+
+```python
+from pysr import PySRRegressor
+
+guesses, tried = None, []
+while True:
+    model = PySRRegressor(**model_kwargs, guesses=guesses, random_state=0)
+    model.fit(X, y, variable_names=VARIABLE_NAMES)
+    front = model.equations_
+    if front["loss"].min() <= 2 * NOISE_FLOOR:
+        break
+    proposal = agent(front, tried)
+    if proposal is None:
+        break
+    tried.append(proposal)
+    guesses = [proposal]
+```
+
+Use `examples/agent_loop_guesses.py` for the complete handoff workflow.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/value-types.md
+---
+# Value types
+
+## Complex numbers
+
+To fit complex-valued expressions, pass feature and target arrays with a complex NumPy dtype.
+
+The code constructs a complex cosine target and restricts the search to `+`, `-`, `*`, and `cos`:
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor
+
+X = np.random.randn(100, 1) + 1j * np.random.randn(100, 1)
+y = (1 + 2j) * np.cos(X[:, 0] * (0.5 - 0.2j))
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*"], unary_operators=["cos"], niterations=100,
+)
+
+model.fit(X, y)
+```
+
+The fitted constants belong to the complex-valued expression domain. Use `model.sympy()` to inspect the selected equation in SymPy form:
+
+```python
+model.sympy()
+```
+
+Pass an equation-row index to `predict`; `-1` selects the final row of `equations_`:
+
+```python
+model.predict(X, -1)
+```
+
+## Julia packages and types
+
+PySR delegates its symbolic-regression search to the pure Julia package [SymbolicRegression.jl](https://github.com/astroautomata/SymbolicRegression.jl). A custom operator can call functionality from another Julia package through that backend.
+
+Load the package that supplies the prime lookup before defining the operator. The target in this example is
+
+$$ y = p\_{3x + 1} - 5, $$
+
+where $p_i$ denotes the $i$th prime and $x$ is the input feature. The lookup comes from [Primes.jl](https://github.com/JuliaMath/Primes.jl).
+
+First, import the handle to PySR's Julia runtime:
+
+```python
+from pysr import jl
+```
+
+`jl` is the juliacall runtime object, and `jl.seval` evaluates Julia source from Python. Use it to add `Primes.jl` to the active PySR environment:
+
+```python
+from pysr import jl
+
+jl.seval("""
+import Pkg
+Pkg.add("Primes")
+""")
+```
+
+Adding a package and importing its namespace are separate steps. Import `Primes` before defining `p`:
+
+```python
+from pysr import jl
+
+jl.seval("import Primes")
+```
+
+With the package available, define the unary operator used by the search:
+
+```python
+from pysr import jl
+
+jl.seval("""
+function p(i::T) where T
+    if (0.5 < i < 1000)
+        return T(Primes.prime(round(Int, i)))
+    else
+        return T(NaN)
+    end
+end
+""")
+```
+
+The operator rounds inputs within `0.5 < i < 1000` to prime indices and preserves the input type `T`. Outside that domain it returns `T(NaN)` to reject invalid evaluations.
+
+Call the Julia function through `jl.p` to build the prime values used by the synthetic data:
+
+```python
+from pysr import jl
+
+primes = {i: jl.p(i*1.0) for i in range(1, 999)}
+```
+
+Use the lookup table to generate noisy samples of the target:
+
+```python
+import numpy as np
+
+X = np.random.randint(0, 100, 100)[:, None]
+y = [primes[3*X[i, 0] + 1] - 5 + np.random.randn()*0.001 for i in range(100)]
+```
+
+Register `p` with the regular PySR operator interface. The `sympy_p` subclass and `extra_sympy_mappings` give SymPy a symbolic form for the custom function:
+
+```python
+from pysr import PySRRegressor
+import sympy
+
+class sympy_p(sympy.Function):
+    pass
+
+model = PySRRegressor(
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["p"],
+    niterations=100,
+    extra_sympy_mappings={"p": sympy_p}
+)
+```
+
+Fit the model on the generated pairs:
+
+```python
+model.fit(X, y)
+```
+
+Since `p` rounds its argument, different real offsets can produce the same integer prime index, so the offset in a fitted expression need not equal `1` exactly. Inspect the selected equation in SymPy with:
+
+```python
+model.sympy()
+```
+
+## Custom value types
+
+`TypeSpec` declares a custom Julia value that can flow through an expression tree. Vectors, tensors, strings, structs, and other Julia value types can serve as payloads when their behavior is described by the type's hooks, operators, and loss.
+
+A model configured with `type_spec=TypeSpec(...)` needs three pieces:
+
+1. Define hooks that sample and change values. For continuously optimized constants, `scalar_constants` exposes scalar coordinates and `with_scalar_constants` rebuilds the value. A custom `mutate` hook handles changes that need a discrete or structural operation.
+2. Choose exactly one of `elementwise_loss`, `loss_function`, or `loss_function_expression`. The selected loss must accept the custom values and return a real-valued score. Elementwise-loss return types are inferred; a full objective requires an explicit `loss_type`.
+3. Supply operators through `operators={...}`, grouped by arity. Each operator must accept and return the declared value type so the type-stability check succeeds. Add an explicit return annotation such as `::Vec2` when Julia cannot infer it.
+
+The examples below combine these pieces for vector values, strings as discrete constants, and payloads with several shapes.
+
+### Vector-valued expression trees
+
+This example searches for an expression whose values are two-dimensional vectors:
+
+$$
+y = \operatorname{rotate90}(x_1) + 2x_2 +
+\begin{bmatrix}0.5 \ -1.0\end{bmatrix}.
+$$
+
+The 128-by-2 DataFrame has two vector-valued features per row, and each entry of `y` is one target vector. The table dimensions describe samples and features, while each cell of the object array holds a single logical vector value.
+
+```python
+import numpy as np
+import pandas as pd
+
+from pysr import PySRRegressor, TypeSpec
+
+rng = np.random.default_rng(0)
+x1 = [rng.normal(size=2) for _ in range(128)]
+x2 = [rng.normal(size=2) for _ in range(128)]
+X = pd.DataFrame({"x1": x1, "x2": x2})
+y = np.empty(128, dtype=object)
+offset = np.array([0.5, -1.0])
+y[:] = [np.array([-a[1], a[0]]) + 2 * b + offset for a, b in zip(x1, x2)]
+```
+
+Declare `Vec2` with one `Vector{Float64}` field. `sample` creates a random payload of length two, while `scalar_constants` and `with_scalar_constants` expose and rebuild the entries used by continuous constant optimization:
+
+```python
+from pysr import TypeSpec
+
+type_spec = TypeSpec(
+    "Vec2",
+    fields={"data": "Vector{Float64}"},
+    sample="rng -> Vec2(randn(rng, 2))",
+    scalar_constants="value -> value.data",
+    with_scalar_constants=(
+        "(value, scalar_constants) -> Vec2(scalar_constants)"
+    ),
+)
+```
+
+PySR derives how values are initialized, mutated, validated, counted, packed, and unpacked from these hooks. Add `init` or `mutate` for specialized search behavior, or `string` for custom display, when the derived defaults are insufficient.
+
+`TypeSpec` generates the Julia value type from that declaration. Its equivalent Julia struct has one vector field:
+
+```julia
+struct Vec2
+    data::Vector{Float64}
+end
+```
+
+Define operators that consume and return `Vec2` values:
+
+```python
+operators = {
+    1: [
+        "rotate90(a::Vec2) = Vec2([-a.data[2], a.data[1]])",
+        "double(a::Vec2) = Vec2(2a.data)",
+    ],
+    2: ["add_vectors(a::Vec2, b::Vec2) = Vec2(a.data + b.data)"],
+}
+```
+
+The elementwise loss compares vector payloads by summing squared differences, which gives the real-valued score the search requires:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=type_spec,
+    operators=operators,
+    elementwise_loss="vector_loss(a::Vec2, b::Vec2) = sum(abs2, a.data - b.data)",
+    niterations=40,
+    populations=4,
+    maxsize=10,
+)
+
+model.fit(X, y)
+print(model.equations_)
+```
+
+The search space can represent the target as `add_vectors(add_vectors(rotate90(x1), double(x2)), Vec2([0.5, -1.0]))`. The vector constant carries both offset components, which the scalar hook pair exposes for joint optimization.
+
+This example treats each string as a value and chooses a separator from a finite set during mutation. It lowercases the first input, uppercases the second, and joins them with the selected separator:
+
+```python
+import numpy as np
+import pandas as pd
+
+from pysr import PySRRegressor, TypeSpec
+
+X = pd.DataFrame(
+    {
+        "first": ["Py", "symbolic", "hello", "left"],
+        "second": ["SR", "regression", "world", "right"],
+    }
+)
+y = np.array(
+    [f"{a.lower()}-{b.upper()}" for a, b in X.itertuples(index=False)],
+    dtype=object,
+)
+
+type_spec = TypeSpec(
+    "StringValue",
+    fields={"data": "String"},
+    sample='rng -> StringValue(rand(rng, ("", "-", "_")))',
+    mutate="""
+    mutate_string(rng, value, temperature) = StringValue(rand(rng, ("", "-", "_")))
+    """,
+)
+
+model = PySRRegressor(
+    type_spec=type_spec,
+    operators={
+        1: [
+            "string_lowercase(x::StringValue) = StringValue(lowercase(x.data))",
+            "string_uppercase(x::StringValue) = StringValue(uppercase(x.data))",
+        ],
+        2: [
+            "string_concat(a::StringValue, b::StringValue) = StringValue(a.data * b.data)"
+        ],
+    },
+    elementwise_loss="""
+    string_loss(a::StringValue, b::StringValue) = Float64(Base.editdistance(a.data, b.data))
+    """,
+    niterations=40,
+)
+
+model.fit(X, y)
+print(model.equations_)
+```
+
+The `sample` and `mutate` hooks choose discrete separator constants. Without a
+`scalar_constants` and `with_scalar_constants` pair, BFGS leaves them unchanged.
+Edit distance provides the real-valued loss for string outputs.
+
+A `TypeSpec` can place scalar, vector, and matrix payloads in the same Julia value type. Its scalar-constant hooks flatten each payload for BFGS and rebuild its original shape.
+
+The advanced example searches for this two-layer neural network:
+
+$$ y = W_2\operatorname{relu}(W_1x + b_1) + b_2 $$
+
+The targets are vectors. `safe_matmul` and `safe_add` return `NaN` for incompatible shapes, so expressions using those helpers receive an invalid value instead of a dimension error:
+
+```python
+import numpy as np
+import pandas as pd
+
+from pysr import PySRRegressor, TypeSpec
+
+preamble = """
+const NNPayload = Union{Float64, Vector{Float64}, Matrix{Float64}}
+
+safe_matmul(a::Matrix{Float64}, b::Vector{Float64}) =
+    size(a, 2) == length(b) ? a * b : NaN
+safe_matmul(::NNPayload, ::NNPayload) = NaN
+
+safe_add(a::Float64, b::Float64) = a + b
+safe_add(a::T, b::T) where {T<:Union{Vector{Float64}, Matrix{Float64}}} =
+    size(a) == size(b) ? a + b : NaN
+safe_add(::NNPayload, ::NNPayload) = NaN
+
+# Constants sample a random rank, generating only the payload that was chosen:
+function random_nn_payload(rng)
+    rank = rand(rng, 0:2)
+    rank == 0 ? randn(rng) : rank == 1 ? randn(rng, 2) : randn(rng, 2, 2)
+end
+"""
+
+type_spec = TypeSpec(
+    "NNValue",
+    fields={"data": "NNPayload"},
+    sample="rng -> NNValue(random_nn_payload(rng))",
+    # Mutations usually perturb every scalar in the payload, but occasionally
+    # resample a fresh rank:
+    mutate="""
+    (rng, value, temperature) -> if rand(rng) < 0.1
+        NNValue(random_nn_payload(rng))
+    else
+        NNValue(value.data .+ temperature .* randn(rng, size(value.data)...))
+    end
+    """,
+    scalar_constants="""
+    function scalar_constants(value)
+        return value.data isa Float64 ? [value.data] : vec(value.data)
+    end
+    """,
+    with_scalar_constants="""
+    function with_scalar_constants(value, scalar_constants)
+        data = value.data isa Float64 ? scalar_constants[1] :
+            reshape(collect(scalar_constants), size(value.data))
+        return NNValue(data)
+    end
+    """,
+    preamble=preamble,
+)
+```
+
+`preamble` makes the payload union and helpers available before the generated type is
+defined. Mutation can change a constant's rank; continuous optimization preserves its
+shape through the scalar hook pair.
+
+Generate vector-valued targets from fixed weights and biases:
+
+```python
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(0)
+x_values = rng.normal(size=(64, 2))
+W1 = np.array([[1.2, -0.7], [0.5, 1.1]])
+b1 = np.array([0.3, -0.2])
+W2 = np.array([[0.8, -1.0], [1.3, 0.4]])
+b2 = np.array([-0.4, 0.2])
+y_values = (W2 @ np.maximum(x_values @ W1.T + b1, 0).T).T + b2
+
+X = pd.DataFrame({"x": list(x_values)})
+y = pd.Series(list(y_values), dtype=object)
+```
+
+Register the neural-network operations and score matching vector outputs with mean squared error. The loss penalizes other output shapes:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=type_spec,
+    operators={
+        1: ["nn_relu(a) = NNValue(max.(a.data, 0.0))"],
+        2: [
+            "nn_matmul(a, b) = NNValue(safe_matmul(a.data, b.data))",
+            "nn_add(a, b) = NNValue(safe_add(a.data, b.data))",
+        ],
+    },
+    elementwise_loss="""
+    function nn_mse(a, b)::Float64
+        valid = a.data isa Vector && b.data isa Vector && size(a.data) == size(b.data)
+        return valid ? sum(abs2, a.data .- b.data) / length(a.data) : 1.0e6
+    end
+    """,
+    niterations=100,
+    populations=4,
+    maxsize=11,
+)
+
+model.fit(X, y)
+print(model.equations_)
+```
+
+A recovered expression can have the form `nn_matmul(W2, nn_add(b, nn_relu(nn_matmul(W1, nn_add(x, c)))))`. The inner constant `c` represents the first bias through $b_1 = W_1c$, and the outer constant `b` represents the second through $b_2 = W_2b$. Each displayed constant is an `NNValue` containing its fitted scalar, vector, or matrix payload.
+
+The same custom-value interface can seed a search with `guesses`. In the vector example above,
+`Vec2` is the generated constructor from its `TypeSpec`, `add_vectors` is the declared binary
+operator, and `x1` is the first named feature column. A matching guess is
+`guesses=["add_vectors(x1, Vec2([1.0, 2.0]))"]`.
+
+---
+
+---
+url: https://pysr.ai/dev/examples/beyond-numeric-values.md
+---
+# Beyond numeric values
+
+These examples carry values that have their own structure: letters, cell states, machine words, and pen programs. A `TypeSpec` supplies each value's representation and hooks such as sampling, mutation, and printing; typed operators define how values combine and transform; and the loss determines what counts as agreement on the scored domain. Read [Custom value types](/examples/value-types#custom-value-types) first for the contract that a custom type must satisfy.
+
+## Breaking an affine cipher with a letter type
+
+The data comes from the affine cipher
+
+$$ E(p) = (5p + 8) \bmod 26, $$
+
+where each letter is represented by its position from `A` through `Z`. The search receives only pairs of ciphertext and plaintext codes. It must infer the inverse relation from those examples instead of being handed the displayed formula.
+
+```python
+import numpy as np
+
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+PLAIN = "THELAWSOFPHYSICSAREWRITTENINTHELANGUAGEOFMATHEMATICS"
+CIPHER = "".join(ALPHABET[(5 * ALPHABET.index(c) + 8) % 26] for c in PLAIN)
+
+X = np.array([[ALPHABET.index(c)] for c in CIPHER], dtype=object)
+y = np.array([ALPHABET.index(c) for c in PLAIN], dtype=object)
+```
+
+`Letter` stores a code in `0:25`. Its `string` hook displays constants as letters, such as `V` for code `21`.
+
+```python
+from pysr import PySRRegressor, TypeSpec
+
+spec = TypeSpec(
+    "Letter",
+    fields={"code": "Int"},
+    sample="rng -> Letter(rand(rng, 0:25))",
+    mutate="(rng, value, temperature) -> Letter(mod(value.code + rand(rng, (-1, 1)), 26))",
+    string="value -> string(Char('A' + value.code))",
+)
+```
+
+The three operators implement addition, subtraction, and multiplication modulo $26$. Every result remains a `Letter`, and the modulus appears directly in each operator. That built-in alphabet size makes this the easier cipher search.
+
+Use absolute code distance as `elementwise_loss` to reward partial improvements. Zero loss means every ciphertext/plaintext pair matches:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=spec,
+    operators={
+        2: [
+            "shift(a::Letter, b::Letter) = Letter(mod(a.code + b.code, 26))",
+            "unshift(a::Letter, b::Letter) = Letter(mod(a.code - b.code, 26))",
+            "mix(a::Letter, b::Letter) = Letter(mod(a.code * b.code, 26))",
+        ]
+    },
+    elementwise_loss="letter_loss(prediction::Letter, target::Letter)::Float64 = abs(prediction.code - target.code)",
+    niterations=20,
+    random_state=0,
+)
+model.fit(X, y)
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+A `loss_function` is useful when scoring needs the dataset as a whole, as in the rollout in [Swinging up a cart-pole](/examples/objectives#swinging-up-a-cart-pole-with-a-rollout-objective) or the period certificate in [Inventing a pseudorandom generator](/examples/objectives#inventing-a-pseudorandom-generator-with-no-target).
+
+One recovered expression is `mix(V, shift(S, x0))`: `V` has code $21$ and `S` has code $18$, giving $21(x_0 + 18) \bmod 26$. Since $21$ is the multiplicative inverse of $5$ modulo $26$, this expression decodes the ciphertext.
+
+### Learning the modulus too
+
+The harder variant removes the alphabet size from the operators. It uses values in `0:51` with integer addition, multiplication, and modulo, so the search must discover the constant $26$ along with the decryption law. This removes a strong structural hint and enlarges the constant search.
+
+One recovered decryption law is:
+
+```
+modulo(mul(add(18, x0), 47), 26)
+```
+
+Run `examples/affine_cipher.py` for the first search or `examples/affine_freemod.py` for the full type, operator, and loss setup of this variant. Allow several minutes for the latter.
+
+## Rediscovering Conway's Game of Life
+
+Conway's Game of Life can be written as a rule about a cell and its live-neighbour count. This example withholds that rule and supplies only its transition table, asking PySR to reconstruct the logical expression.
+
+The table has $18$ distinct states: two current cell states, each paired with every neighbour count from $0$ through $8$. Repeating the table $8$ times produces $144$ rows for scoring without introducing new cases. A zero-one loss therefore charges $1/18$ for a rule that misses one distinct state. The arrays use `dtype=object` so each value can be wrapped in the custom Julia type.
+
+```python
+import numpy as np
+
+TABLE = [(a, n, int(n == 3 or (a == 1 and n == 2))) for a in (0, 1) for n in range(9)]
+REPLICAS = 8
+X = np.array([[a, n] for a, n, _ in TABLE] * REPLICAS, dtype=object)
+y = np.array([t for _, _, t in TABLE] * REPLICAS, dtype=object)
+```
+
+The `Cell` type wraps a single `Int`, which is enough for the current state, the neighbour count, and the output code. Its hooks propose small counts, move existing constants locally modulo $9$, and print the integer payload.
+
+```python
+from pysr import PySRRegressor, TypeSpec
+
+spec = TypeSpec(
+    "Cell",
+    fields={"v": "Int"},
+    sample="rng -> Cell(rand(rng, 0:8))",
+    mutate="(rng, value, temperature) -> Cell(mod(value.v + rand(rng, (-1, 1)), 9))",
+    string="value -> string(value.v)",
+)
+```
+
+The operator vocabulary contains `not`, `and`, `or`, and the equality test `eq`. Arithmetic and threshold comparisons are absent, so a neighbour threshold can enter an expression only as a constant in a call such as `eq(n, 3)`. The loss is zero-one equality on each table row. It records exact agreement, which suits a discrete truth table where the numerical distance between cell codes carries no meaning.
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=spec,
+    operators={
+        1: ["not(a::Cell) = Cell(a.v == 0 ? 1 : 0)"],
+        2: [
+            "and(a::Cell, b::Cell) = Cell((a.v != 0 && b.v != 0) ? 1 : 0)",
+            "or(a::Cell, b::Cell) = Cell((a.v != 0 || b.v != 0) ? 1 : 0)",
+            "eq(a::Cell, b::Cell) = Cell(a.v == b.v ? 1 : 0)",
+        ],
+    },
+    elementwise_loss="cell_loss(prediction::Cell, target::Cell)::Float64 = prediction.v == target.v ? 0.0 : 1.0",
+    niterations=160,
+    random_state=0,
+)
+model.fit(X, y, variable_names=["alive", "n"])
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+A recovered rule is:
+
+```
+or(eq(n, 3), and(eq(n, 2), alive))
+```
+
+The first branch allows birth or survival at three neighbours. The second adds survival of a live cell at two neighbours. It agrees with all 18 possible input states, so the transition table fully checks this local rule.
+
+Run `examples/game_of_life.py` to reproduce the Game of Life search.
+
+## Searching over machine words
+
+This search targets the bit interleave used by Morton, or Z-order, indexing. It gives every expression a `Word` value and restricts the vocabulary to machine instructions: xor, and, or, not, left shift, and right shift. Shift distances are ordinary `Word` constants, so the search must find them as part of the expression.
+
+The reference interleave is evaluated on all $256$ pairs of $4$-bit inputs.
+
+```python
+import numpy as np
+
+from pysr import PySRRegressor, TypeSpec
+
+WIDTH = 4
+WIDER = 5
+
+
+def morton(x, y, width=WIDTH):
+    z = 0
+    for i in range(width):
+        z |= ((x >> i) & 1) << (2 * i)
+        z |= ((y >> i) & 1) << (2 * i + 1)
+    return z
+
+
+PAIRS = [(a, b) for b in range(1 << WIDTH) for a in range(1 << WIDTH)]
+X = np.array(PAIRS, dtype=object)
+y = np.array([morton(a, b) for a, b in PAIRS], dtype=object)
+```
+
+The `Word` type wraps a `UInt32`. Its `sample` hook favors small values because useful shift distances are small while mask constants still need to reach across the full word. `mutate` either flips a single bit or takes a random unsigned step. This lets a mask change one bit at a time. The `string` hook renders small values as decimals and larger values as zero-padded hexadecimal, keeping shift constants and masks easy to distinguish. The `shl` and `shr` definitions below pass `b.bits` directly; this example does not mask the shift count into `0:31`, so arbitrary sampled `UInt32` counts follow the underlying Julia shift semantics.
+
+```python
+from pysr import TypeSpec
+
+spec = TypeSpec(
+    "Word",
+    fields={"bits": "UInt32"},
+    sample="rng -> Word(rand(rng, Bool) ? rand(rng, UInt32(0):UInt32(31)) : rand(rng, UInt32))",
+    mutate="(rng, value, temperature) -> Word(rand(rng, Bool) ? xor(value.bits, UInt32(1) << rand(rng, 0:31)) : value.bits + rand(rng, (UInt32(1), typemax(UInt32))))",
+    string='value -> value.bits < UInt32(32) ? string(value.bits) : "0x" * string(value.bits, base = 16, pad = 8)',
+)
+```
+
+Each operator lifts one machine instruction to `Word`. The loss counts the set bits in the xor of prediction and target and divides by $32$. A zero loss therefore means that every output bit agrees for every scored pair.
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=spec,
+    operators={
+        1: ["bnot(a::Word) = Word(~a.bits)"],
+        2: [
+            "bxor(a::Word, b::Word) = Word(xor(a.bits, b.bits))",
+            "band(a::Word, b::Word) = Word(a.bits & b.bits)",
+            "bor(a::Word, b::Word) = Word(a.bits | b.bits)",
+            "shl(a::Word, b::Word) = Word(a.bits << b.bits)",
+            "shr(a::Word, b::Word) = Word(a.bits >> b.bits)",
+        ],
+    },
+    elementwise_loss="bit_loss(prediction::Word, target::Word)::Float64 = count_ones(xor(prediction.bits, target.bits)) / 32",
+    maxsize=45,
+    niterations=800,
+    random_state=0,
+    verbosity=0,
+)
+
+model.fit(X, y, variable_names=["x", "y"])
+```
+
+Set `maxsize` large enough for the intended computation. A four-bit reference interleaver uses 41 tree nodes because repeated subexpressions each count toward its size; `maxsize=45` leaves room for that construction.
+
+An expression that matches all four-bit pairs need not work at larger widths: the training domain leaves parts of the masks unconstrained. Use the script's `exact_front_rows` helper to check four-bit agreement and `wider_agreement(model, index)` to test a selected expression on five-bit inputs.
+
+Run `examples/morton_interleave.py` to reproduce this machine-word search.
+
+## Turtle graphics: searching over drawings
+
+The excerpts below come from `examples/turtle_graphics.py`. Run that script for the complete example; it supplies the Python `path` converter and the Julia `PREAMBLE` containing the underscore-prefixed drawing, mutation, and scoring helpers and constants.
+
+Here the value is a drawing program. A `Path` is a list of pen commands, `forward` and `turn`; operators repeat a path, reflect it, and concatenate command lists. Each expression therefore evaluates to a program, and the value of that program is the picture it draws.
+
+The drawing uses two parallel vectors. `kind=0` marks forward motion. `kind=1` marks a turn. `val` stores the forward length or the turn angle in radians. The `ARM` list below writes turn angles in degrees, and the Python `path` helper converts those entries to radians before storing `y`; the custom `string` hook prints stored turns back in degrees. The target is a plus-sign outline made from four copies of an arm with three edges. The dataset has one row and one feature, `f`, containing a unit forward step. Turns and the path operators must supply the rest of the program.
+
+```python
+import numpy as np
+from pysr import PySRRegressor, TypeSpec
+
+ARM = [("F", 1.0), ("T", 90.0), ("F", 1.0), ("T", -90.0), ("F", 1.0), ("T", 90.0)]
+TARGET = ARM * 4
+
+X = np.empty((1, 1), dtype=object)
+X[0, 0] = ([0], [1.0])
+y = np.empty(1, dtype=object)
+y[0] = path(TARGET)
+VARIABLE_NAMES = ["f"]
+```
+
+### Scoring a picture
+
+Two programs can trace the same outline in different orders, so the loss compares rasterized pictures instead of command lists. Each drawing is placed on a $96\times96$ grid after its bounding box is centered and its larger extent is scaled to the grid. The comparison therefore responds to shape while ignoring translation and overall size.
+
+The score is a symmetric chamfer distance between the two sets of lit pixels, measured in pixels and divided by the grid width. The score averages the distance from candidate pixels to the target and from target pixels to the candidate, so zero means the raster masks coincide.
+
+```julia
+# Symmetric chamfer distance in pixels, divided by the grid width. Zero means
+# the two drawings lit exactly the same pixels.
+function _chamfer(pk::Vector{Int8}, pv::Vector{Float64},
+                  tk::Vector{Int8}, tv::Vector{Float64})
+    a = _raster(pk, pv)
+    a === nothing && return _FAIL
+    b, db = _target_grids(tk, tv)
+    any(b) || return _FAIL
+    da = _edt(a)
+    ab = _mean_to(a, db); ba = _mean_to(b, da)
+    (ab === nothing || ba === nothing) && return _FAIL
+    v = 0.5 * (ab + ba) / _GRID
+    return isfinite(v) ? v : _FAIL
+end
+```
+
+### The pen program type
+
+The `TypeSpec` for `Path` stores the two vectors and supplies hooks for continuous turns. `sample` creates one turn at an angle in the interval from $-180$ to $180$ degrees. `mutate` selects a turn and either perturbs it by a Gaussian step with scale $30$ degrees times the temperature or resamples it. The scalar-constant hooks expose every turn to BFGS, which can polish an angle after evolution has placed it near a good value.
+
+Constant folding can collapse an all-constant subtree into a multi-command path. `mutate` and `string` therefore handle values command by command, and the printer represents a folded multi-command constant as `p[...]`.
+
+```python
+from pysr import TypeSpec
+
+PATH = TypeSpec(
+    "Path",
+    fields={"kind": "Vector{Int8}", "val": "Vector{Float64}"},
+    preamble=PREAMBLE,
+    sample="rng -> Path(Int8[1], [_real(rng)])",
+    mutate="""(rng, value, temperature) -> begin
+        turns = findall(isone, value.kind)
+        isempty(turns) && return Path(Int8[1], [_real(rng)])
+        i = rand(rng, turns)
+        val = copy(value.val)
+        val[i] = rand(rng, Bool) ? _perturb(rng, val[i], temperature) : _real(rng)
+        Path(copy(value.kind), val)
+    end""",
+    scalar_constants="value -> _turns(value.kind, value.val)",
+    with_scalar_constants="(value, c) -> Path(copy(value.kind), _put_turns(value.kind, value.val, c))",
+    is_valid="value -> !isempty(value.kind) && all(isfinite, value.val)",
+    string="value -> _literal(value.kind, value.val)",
+)
+```
+
+The five operators form a small program algebra. `seq` runs one path after another. `dup` and `tri` repeat a path twice and three times. `mir` negates every turn, reflecting the path. `nest` performs an L-system substitution: it replaces each forward command with a copy of the full path. Each copy is scaled so its net displacement matches the forward command it replaces. Repetition and reflection let a short expression draw many strokes.
+
+```python
+OPERATORS = {
+    1: [
+        "dup(a::Path) = (t = _seq(a.kind, a.val, a.kind, a.val); Path(t[1], t[2]))",
+        "tri(a::Path) = (t = _seq(a.kind, a.val, a.kind, a.val); u = _seq(t[1], t[2], a.kind, a.val); Path(u[1], u[2]))",
+        "mir(a::Path) = (t = _mir(a.kind, a.val); Path(t[1], t[2]))",
+        "nest(a::Path) = (t = _nest(a.kind, a.val); Path(t[1], t[2]))",
+    ],
+    2: [
+        "seq(a::Path, b::Path) = (t = _seq(a.kind, a.val, b.kind, b.val); Path(t[1], t[2]))"
+    ],
+}
+
+CHAMFER_LOSS = "chamfer(prediction::Path, target::Path)::Float64 = _chamfer(prediction.kind, prediction.val, target.kind, target.val)"
+```
+
+### The search
+
+Pass the path type, operators, and picture loss to the estimator:
+
+```python
+from pysr import PySRRegressor
+
+model = PySRRegressor(
+    type_spec=PATH,
+    operators=OPERATORS,
+    elementwise_loss=CHAMFER_LOSS,
+    niterations=20,
+    verbosity=0,
+    random_state=0,
+)
+
+model.fit(X, y, variable_names=["f"])
+print(model.equations_[["complexity", "loss", "equation"]].to_string(index=False))
+```
+
+Scoring each candidate requires rasterization and a distance transform, so even this 20-iteration search can take tens of minutes to hours. Zero loss means the raster masks match; it does not require identical command order or exact turn angles.
+
+One recovered drawing program is:
+
+```
+dup(dup(mir(seq(t-179.6493032061754, tri(seq(p[t-270.04570985370526,t-270.04570985370526,t-270.04570985370526], f))))))
+```
+
+The complete drawing search is in `examples/turtle_graphics.py`.
+
+## Evolving a hopping controller
+
+Each value in this search is a motor command with three numbers, one for each joint of MuJoCo's hopper. The objective measures performance in simulation. Each candidate expression controls the robot for a fixed-horizon rollout, and its loss is the negated reward from that rollout. The search uses no expert policy, demonstration data, or distilled network; it optimises locomotion directly.
+
+The snippets below describe the recorded search. The runnable script, `examples/hopper_controller.py`, replays its saved controller.
+
+The controller is a `Vec3`, three `Float64` components carried through the tree together:
+
+```python
+from pysr import TypeSpec
+
+TypeSpec(
+    "Vec3",
+    fields={"data": "Vector{Float64}"},
+    sample="rng -> Vec3(randn(rng, 3))",
+    scalar_constants="value -> Float64[value.data[1], value.data[2], value.data[3]]",
+    with_scalar_constants="(value, constants) -> Vec3(collect(constants))",
+    is_valid="value -> length(value.data) == 3 && all(isfinite, value.data)",
+    string='value -> "Vec3([" * join(repr.(Float64.(value.data)), ", ") * "])"',
+    loss_type="Float64",
+)
+```
+
+Each sampled constant contains three independent Gaussian draws, giving each
+motor its own bias. The scalar-constant hooks expose all three components to the
+optimiser so it can tune each motor separately.
+
+The operators are componentwise addition, subtraction and multiplication, and nothing else. No control-specific primitive was supplied:
+
+```python
+{
+    2: [
+        'vadd(x, y) = Vec3(x.data .+ y.data)',
+        'vsub(x, y) = Vec3(x.data .- y.data)',
+        'vmul(x, y) = Vec3(x.data .* y.data)',
+    ]
+}
+```
+
+### Scoring a controller by simulating it
+
+The eleven features encode the hopper state as vectors. They include the three
+joint angles, angular velocities clipped to $\[-10, 10]$ and divided by $10$, and two cyclic permutations
+of each. The torso height, pitch, forward velocity, vertical velocity and
+angular velocity are each broadcast across all three components. The three torso velocities are divided by $5$. A single tree
+computes all three motor commands, so the permuted copies allow each joint to use
+other joints' angles. Before reaching the motors, the final value passes through
+a componentwise `tanh` that limits each command to the actuator range.
+
+Each rollout accumulates the standard Hopper-v5 reward, a survival term plus forward velocity minus a small control cost, and divides by the full horizon, so a fall contributes zero for every step it did not survive. That single number, averaged over eight frozen training starts and negated, is the loss. The Julia loss function is a thin call into the rollout evaluator:
+
+```python
+LOSS_SOURCE = "hopper_rollout_loss(tree, dataset, options) = Main.HopperObjective.loss(tree, dataset, options)"
+```
+
+Because the objective never reads the dataset, `X` and `y` are one row of zero vectors and batching is off. All the information comes from the simulator.
+
+### The recovered controller
+
+Here `A` denotes joint angles, `V` scaled joint angular velocities, and `P` the cyclic permutation `(x0, x1, x2) -> (x1, x2, x0)`. The scalars `p`, `f`, `u`, and `w` denote torso pitch and scaled forward, vertical, and angular velocities:
+
+```
+D = A - 2 P(A) + P(V) - 2 (f + w) + c0
+L = -A - (p + w (P(V) - w)) D - c1
+R = -P(A) - u + w + c2
+action = tanh(P(A) - w + L R)
+```
+
+All products are componentwise, with scalars broadcast. The constant vectors are `c0 = (-0.2477, -4.2268, 8.8397)`, `c1 = (0.0645, 0.6181, 0.3969)`, and `c2 = (0.4974, -1.1921, 1.1808)`, rounded here; the replay script retains their full precision.
+
+### Reproducing the result
+
+Replay the controller on twenty held-out starts with twice the training reset noise.
+
+The replay checks whether the hopper stays upright for eight seconds, travels five metres, and completes at least four contact/liftoff cycles. These criteria check sustained hopping beyond the reward used during training.
+
+The result covers small perturbations of one starting pose in simulation. The evaluation does not test obstacles, hardware, or indefinite hopping.
+
+The saved controller was evaluated with Gymnasium 1.2.2 and MuJoCo 3.3.7. Install `gymnasium[mujoco]==1.2.2` and `mujoco==3.3.7`, then run `python examples/hopper_controller.py`.
+
+---
+
+---
+url: https://pysr.ai/dev/api.md
+---
+# API Reference
+
+`PySRRegressor` has many options for controlling a symbolic regression search.
+Let's look at them below.
+
+### The Algorithm
+
+#### Creating the Search Space
+
+* **`binary_operators`**
+
+  List of strings for binary operators used in the search.
+  See the [operators page](https://pysr.ai/operators)
+  for more details.
+
+  *Default:* `["+", "-", "*", "/"]`
+
+* **`unary_operators`**
+
+  Operators which only take a single scalar as input.
+  For example, `"cos"` or `"exp"`.
+
+  *Default:* `None`
+
+* **`operators`**
+
+  Generic operators by arity (number of arguments). Keys are integers
+  representing arity, values are lists of operator strings.
+  Example: `{1: ["sin", "cos"], 2: ["+", "-", "*"], 3: ["muladd"]}`.
+  Cannot be used with `binary_operators` or `unary_operators`.
+
+  *Default:* `None`
+
+* **`expression_spec`**
+
+  The type of expression to search for. By default,
+  this is just `ExpressionSpec()`. You can also use
+  `TemplateExpressionSpec(...)` which allows you to specify
+  a custom template for the expressions.
+
+  *Default:* `ExpressionSpec()`
+
+* **`type_spec`**
+
+  Declarative custom value type. PySR builds an isolated Julia wrapper,
+  interface methods, operators, and loss from this specification.
+
+  *Default:* `None`
+
+* **`maxsize`**
+
+  Max complexity of an equation.
+
+  *Default:* `30`
+
+* **`maxdepth`**
+
+  Max depth of an equation. You can use both `maxsize` and
+  `maxdepth`. `maxdepth` is by default not used.
+
+  *Default:* `None`
+
+#### Setting the Search Size
+
+* **`niterations`**
+
+  Number of iterations of the algorithm to run. The best
+  equations are printed and migrate between populations at the
+  end of each iteration.
+
+  *Default:* `100`
+
+* **`populations`**
+
+  Number of populations running.
+
+  *Default:* `31`
+
+* **`population_size`**
+
+  Number of individuals in each population.
+
+  *Default:* `27`
+
+* **`ncycles_per_iteration`**
+
+  Number of total mutations to run, per 10 samples of the
+  population, per iteration.
+
+  *Default:* `380`
+
+#### The Objective
+
+* **`elementwise_loss`**
+
+  String of Julia code specifying an elementwise loss function.
+  Can either be a loss from LossFunctions.jl, or your own loss
+  written as a function. Examples of custom written losses include:
+  `myloss(x, y) = abs(x-y)` for non-weighted, or
+  `myloss(x, y, w) = w*abs(x-y)` for weighted.
+  The included losses include:
+  Regression: `LPDistLoss{P}()`, `L1DistLoss()`,
+  `L2DistLoss()` (mean square), `LogitDistLoss()`,
+  `HuberLoss(d)`, `L1EpsilonInsLoss(ϵ)`, `L2EpsilonInsLoss(ϵ)`,
+  `PeriodicLoss(c)`, `QuantileLoss(τ)`.
+  Classification: `ZeroOneLoss()`, `PerceptronLoss()`,
+  `L1HingeLoss()`, `SmoothedL1HingeLoss(γ)`,
+  `ModifiedHuberLoss()`, `L2MarginLoss()`, `ExpLoss()`,
+  `SigmoidLoss()`, `DWDMarginLoss(q)`.
+
+  *Default:* `"L2DistLoss()"`
+
+* **`loss_function`**
+
+  Alternatively, you can specify the full objective function as
+  a snippet of Julia code, including any sort of custom evaluation
+  (including symbolic manipulations beforehand), and any sort
+  of loss function or regularizations. The default `loss_function`
+  used in SymbolicRegression.jl is roughly equal to:
+
+  ```julia
+  function eval_loss(tree, dataset::Dataset{T,L}, options)::L where {T,L}
+      prediction, flag = eval_tree_array(tree, dataset.X, options)
+      if !flag
+          return L(Inf)
+      end
+      return sum((prediction .- dataset.y) .^ 2) / dataset.n
+  end
+  ```
+
+  where the example elementwise loss is mean-squared error.
+  You may pass a function with the same arguments as this (note
+  that the name of the function doesn't matter). Here,
+  both `prediction` and `dataset.y` are 1D arrays of length `dataset.n`.
+
+  *Default:* `None`
+
+* **`loss_function_expression`**
+
+  Similar to `loss_function`, but takes as input the full
+  expression object as the first argument, rather than
+  the innermost `AbstractExpressionNode`. This is useful
+  for specifying custom loss functions on `TemplateExpressionSpec`.
+
+  *Default:* `None`
+
+* **`loss_scale`**
+
+  Determines how loss values are scaled when computing scores.
+  "log" (default) uses logarithmic scaling of loss ratios; this mode
+  requires non-negative loss values and is ideal for traditional
+  loss functions that are always non-negative.
+  "linear" uses direct
+  differences between losses; this mode handles any loss values
+  (including negative) and is useful for custom loss functions,
+  especially those based on likelihoods.
+
+* **`model_selection`**
+
+  Model selection criterion when selecting a final expression from
+  the list of best expression at each complexity.
+  Can be `'accuracy'`, `'best'`, or `'score'`.
+  `'accuracy'` selects the candidate model with the lowest loss
+  (highest accuracy).
+  `'score'` selects the candidate model with the highest score.
+  Score is defined as the negated derivative of the log-loss with
+  respect to complexity - if an expression has a much better
+  loss at a slightly higher complexity, it is preferred.
+  `'best'` selects the candidate model with the highest score
+  among expressions with a loss better than at least 1.5x the
+  most accurate model.
+
+  *Default:* `'best'`
+
+* **`dimensional_constraint_penalty`**
+
+  Additive penalty for if dimensional analysis of an expression fails.
+  By default, this is `1000.0`.
+
+* **`dimensionless_constants_only`**
+
+  Whether to only search for dimensionless constants, if using units.
+
+  *Default:* `False`
+
+#### Working with Complexities
+
+* **`parsimony`**
+
+  Multiplicative factor for how much to punish complexity.
+
+  *Default:* `0.0`
+
+* **`constraints`**
+
+  Dictionary of int (unary) or tuples (multi-arity), this enforces
+  maxsize constraints on the individual arguments of operators.
+  E.g., `'pow': (-1, 1)` says that power laws can have any
+  complexity left argument, but only 1 complexity in the right
+  argument. For arity-3 operators like muladd, use 3-tuples like
+  `'muladd': (-1, -1, 1)` to constrain each argument's complexity.
+  Use this to force more interpretable solutions.
+
+  *Default:* `None`
+
+* **`nested_constraints`**
+
+  Specifies how many times a combination of operators can be
+  nested. For example, `{"sin": {"cos": 0}}, "cos": {"cos": 2}}`
+  specifies that `cos` may never appear within a `sin`, but `sin`
+  can be nested with itself an unlimited number of times. The
+  second term specifies that `cos` can be nested up to 2 times
+  within a `cos`, so that `cos(cos(cos(x)))` is allowed
+  (as well as any combination of `+` or `-` within it), but
+  `cos(cos(cos(cos(x))))` is not allowed. When an operator is not
+  specified, it is assumed that it can be nested an unlimited
+  number of times. This requires that there is no operator which
+  is used both in the unary operators and the binary operators
+  (e.g., `-` could be both subtract, and negation). For binary
+  operators, you only need to provide a single number: both
+  arguments are treated the same way, and the max of each
+  argument is constrained.
+
+  *Default:* `None`
+
+* **`complexity_of_operators`**
+
+  If you would like to use a complexity other than 1 for an
+  operator, specify the complexity here. For example,
+  `{"sin": 2, "+": 1}` would give a complexity of 2 for each use
+  of the `sin` operator, and a complexity of 1 for each use of
+  the `+` operator (which is the default). You may specify real
+  numbers for a complexity, and the total complexity of a tree
+  will be rounded to the nearest integer after computing.
+
+  *Default:* `None`
+
+* **`complexity_of_constants`**
+
+  Complexity of constants.
+
+  *Default:* `1`
+
+* **`complexity_of_variables`**
+
+  Global complexity of variables. To set different complexities for
+  different variables, pass a list of complexities to the `fit` method
+  with keyword `complexity_of_variables`. You cannot use both.
+
+  *Default:* `1`
+
+* **`complexity_mapping`**
+
+  Alternatively, you can pass a function (a string of Julia code) that
+  takes the expression as input and returns the complexity. Make sure that
+  this operates on `AbstractExpression` (and unpacks to `AbstractExpressionNode`),
+  and returns an integer.
+
+  *Default:* `None`
+
+* **`warmup_maxsize_by`**
+
+  Whether to slowly increase max size from a small number up to
+  the maxsize (if greater than 0).  If greater than 0, says the
+  fraction of training time at which the current maxsize will
+  reach the user-passed maxsize.
+
+  *Default:* `0.0`
+
+* **`use_frequency`**
+
+  Whether to measure the frequency of complexities, and use that
+  instead of parsimony to explore equation space. Will naturally
+  find equations of all complexities.
+
+  *Default:* `True`
+
+* **`use_frequency_in_tournament`**
+
+  Whether to use the frequency mentioned above in the tournament,
+  rather than just the simulated annealing.
+
+  *Default:* `True`
+
+* **`adaptive_parsimony_scaling`**
+
+  If the adaptive parsimony strategy (`use_frequency` and
+  `use_frequency_in_tournament`), this is how much to (exponentially)
+  weight the contribution. If you find that the search is only optimizing
+  the most complex expressions while the simpler expressions remain stagnant,
+  you should increase this value.
+
+  *Default:* `1040.0`
+
+* **`should_simplify`**
+
+  Whether to use algebraic simplification in the search. Note that only
+  a few simple rules are implemented.
+
+  *Default:* `True`
+
+#### Mutations
+
+* **`default_mutations`**
+
+  Default mutation configurations and their weights. When provided, these
+  replace the SymbolicRegression.jl defaults and plugin-contributed mutations.
+
+  *Default:* `None`
+
+* **`mutations`**
+
+  Mutation configurations and their weights. Entries override or extend
+  `default_mutations` by mutation type.
+
+  *Default:* `None`
+
+* **`default_plugins`**
+
+  Default plugin configurations.
+
+  *Default:* `None`
+
+* **`plugins`**
+
+  Plugin configurations. Entries override or extend `default_plugins` by
+  plugin type.
+
+  *Default:* `None`
+
+* **`weight_add_node`**
+
+  Relative likelihood for mutation to add a node.
+
+  *Default:* `None` (mapping to `2.47`
+
+* **`weight_insert_node`**
+
+  Relative likelihood for mutation to insert a node.
+
+  *Default:* `None` (mapping to `0.0112`
+
+* **`weight_delete_node`**
+
+  Relative likelihood for mutation to delete a node.
+
+  *Default:* `None` (mapping to `0.870`
+
+* **`weight_do_nothing`**
+
+  Relative likelihood for mutation to leave the individual.
+
+  *Default:* `None` (mapping to `0.273`
+
+* **`weight_mutate_constant`**
+
+  Relative likelihood for mutation to change the constant slightly
+  in a random direction.
+
+  *Default:* `None` (mapping to `0.0346`
+
+* **`weight_mutate_operator`**
+
+  Relative likelihood for mutation to swap an operator.
+
+  *Default:* `None` (mapping to `0.293`
+
+* **`weight_mutate_feature`**
+
+  Relative likelihood for mutation to change which feature a variable node references.
+
+  *Default:* `None` (mapping to `0.1`
+
+* **`weight_swap_operands`**
+
+  Relative likehood for swapping operands in binary operators.
+
+  *Default:* `None` (mapping to `0.198`
+
+* **`weight_rotate_tree`**
+
+  How often to perform a tree rotation at a random node.
+
+  *Default:* `None` (mapping to `4.26`
+
+* **`weight_randomize`**
+
+  Relative likelihood for mutation to completely delete and then
+  randomly generate the equation
+
+  *Default:* `None` (mapping to `0.000502`
+
+* **`weight_simplify`**
+
+  Relative likelihood for mutation to simplify constant parts by evaluation
+
+  *Default:* `None` (mapping to `0.00209`
+
+* **`weight_optimize`**
+
+  Constant optimization can also be performed as a mutation, in addition to
+  the normal strategy controlled by `optimize_probability` which happens
+  every iteration. Using it as a mutation is useful if you want to use
+  a large `ncycles_periteration`, and may not optimize very often.
+
+  *Default:* `None` (mapping to `0.0`
+
+* **`weight_backsolve`**
+
+  Relative likelihood for backsolve mutation. To configure its parameters,
+  pass `BacksolveMutation(...)` through `mutations` instead.
+
+  *Default:* `None` (mapping to `0.0`
+
+* **`crossover_probability`**
+
+  Absolute probability of crossover-type genetic operation, instead of a mutation.
+
+  *Default:* `0.2`
+
+* **`annealing`**
+
+  Whether to use annealing.
+
+  *Default:* `True`
+
+* **`alpha`**
+
+  Initial temperature for simulated annealing
+  (requires `annealing` to be `True`).
+
+  *Default:* `3.17`
+
+* **`perturbation_factor`**
+
+  Constants are perturbed by a max factor of
+  (perturbation_factor\*T + 1). Either multiplied by this or
+  divided by this.
+
+  *Default:* `0.129`
+
+* **`probability_negate_constant`**
+
+  Probability of negating a constant in the equation when mutating it.
+
+  *Default:* `0.00743`
+
+* **`skip_mutation_failures`**
+
+  Whether to skip mutation and crossover failures, rather than
+  simply re-sampling the current member.
+
+  *Default:* `True`
+
+#### Tournament Selection
+
+* **`tournament_selection_n`**
+
+  Number of expressions to consider in each tournament.
+
+  *Default:* `15`
+
+* **`tournament_selection_p`**
+
+  Probability of selecting the best expression in each
+  tournament. The probability will decay as p\*(1-p)^n for other
+  expressions, sorted by loss.
+
+  *Default:* `0.982`
+
+#### Constant Optimization
+
+* **`optimizer_algorithm`**
+
+  Optimization scheme to use for optimizing constants. Can currently
+  be `NelderMead` or `BFGS`.
+
+  *Default:* `"BFGS"`
+
+* **`optimizer_nrestarts`**
+
+  Number of time to restart the constants optimization process with
+  different initial conditions.
+
+  *Default:* `2`
+
+* **`optimizer_f_calls_limit`**
+
+  How many function calls to allow during optimization.
+
+  *Default:* `10_000`
+
+* **`optimize_probability`**
+
+  Probability of optimizing the constants during a single iteration of
+  the evolutionary algorithm.
+
+  *Default:* `0.14`
+
+* **`optimizer_iterations`**
+
+  Number of iterations that the constants optimizer can take.
+
+  *Default:* `8`
+
+* **`should_optimize_constants`**
+
+  Whether to numerically optimize constants (Nelder-Mead/Newton)
+  at the end of each iteration.
+
+  *Default:* `True`
+
+#### Migration between Populations
+
+* **`fraction_replaced`**
+
+  How much of population to replace with migrating equations from
+  other populations.
+
+  *Default:* `0.00036`
+
+* **`fraction_replaced_hof`**
+
+  How much of population to replace with migrating equations from
+  hall of fame.
+
+  *Default:* `0.0614`
+
+* **`fraction_replaced_guesses`**
+
+  How much of the population to replace with migrating equations from
+  guesses.
+
+  *Default:* `0.001`
+
+* **`migration`**
+
+  Whether to migrate.
+
+  *Default:* `True`
+
+* **`hof_migration`**
+
+  Whether to have the hall of fame migrate.
+
+  *Default:* `True`
+
+* **`topn`**
+
+  How many top individuals migrate from each population.
+
+  *Default:* `12`
+
+### Data Preprocessing
+
+* **`denoise`**
+
+  Whether to use a Gaussian Process to denoise the data before
+  inputting to PySR. Can help PySR fit noisy data.
+
+  *Default:* `False`
+
+* **`select_k_features`**
+
+  Whether to run feature selection in Python using random forests,
+  before passing to the symbolic regression code. None means no
+  feature selection; an int means select that many features.
+
+  *Default:* `None`
+
+### Stopping Criteria
+
+* **`max_evals`**
+
+  Limits the total number of evaluations of expressions to
+  this number.
+
+  *Default:* `None`
+
+* **`timeout_in_seconds`**
+
+  Make the search return early once this many seconds have passed.
+
+  *Default:* `None`
+
+* **`early_stop_condition`**
+
+  Stop the search early if this loss is reached. You may also
+  pass a string containing a Julia function which
+  takes a loss and complexity as input, for example:
+  `"f(loss, complexity) = (loss < 0.1) && (complexity < 10)"`.
+
+  *Default:* `None`
+
+### Performance and Parallelization
+
+* **`parallelism`**
+
+  Parallelism to use for the search. Can be `"serial"`, `"multithreading"`, or `"multiprocessing"`.
+
+  *Default:* `"multithreading"`
+
+* **`procs`**
+
+  Number of processes to use for parallelism. If `None`, defaults to `cpu_count()`.
+
+  *Default:* `None`
+
+* **`cluster_manager`**
+
+  For distributed computing, this sets the job queue system. Set to
+  "slurm" to use an existing Slurm allocation, with `procs` equal to
+  its task count. Other supported values are "pbs", "lsf", "sge",
+  "qrsh", "scyld", and "htc".
+
+  *Default:* `None`
+
+* **`heap_size_hint_in_bytes`**
+
+  For multiprocessing, this sets the `--heap-size-hint` parameter
+  for new Julia processes. This can be configured when using
+  multi-node distributed compute, to give a hint to each process
+  about how much memory they can use before aggressive garbage
+  collection.
+
+* **`worker_timeout`**
+
+  Timeout in seconds for worker processes during multiprocessing to respond.
+  If a worker does not respond within this time, it will be restarted.
+
+  *Default:* `None`
+
+* **`worker_imports`**
+
+  Module names to import on multiprocessing workers. For example,
+  `["MyPackage", "OtherPackage"]` runs
+  `using MyPackage, OtherPackage` on every worker. TypeSpec preambles,
+  operators, objectives, and expression specifications may depend on
+  packages listed here; arbitrary bindings from `Main` are unavailable.
+
+  *Default:* `None`
+
+* **`batching`**
+
+  Whether to compare population members on small batches during
+  evolution. Still uses full dataset for comparing against hall
+  of fame. `"auto"` lets SymbolicRegression.jl choose based on the
+  dataset.
+
+  *Default:* `"auto"`
+
+* **`batch_size`**
+
+  The batch size to use if batching. If None, uses the
+  full dataset when N<=1000, 128 for N<5000, 256 for N<50000,
+  or 512 for N≥50000.
+
+  *Default:* `None`
+
+* **`precision`**
+
+  What precision to use for the data. By default this is `32`
+  (float32), but you can select `64` or `16` as well, giving
+  you 64 or 16 bits of floating point precision, respectively.
+  If you pass complex data, the corresponding complex precision
+  will be used (i.e., `64` for complex128, `32` for complex64).
+
+  *Default:* `32`
+
+* **`fast_cycle`**
+
+  Batch over population subsamples. This is a slightly different
+  algorithm than regularized evolution, but does cycles 15%
+  faster. May be algorithmically less efficient.
+
+  *Default:* `False`
+
+* **`turbo`**
+
+  (Experimental) Whether to use LoopVectorization.jl to speed up the
+  search evaluation. Certain operators may not be supported.
+  Does not support 16-bit precision floats.
+
+  *Default:* `False`
+
+* **`bumper`**
+
+  (Experimental) Whether to use Bumper.jl to speed up the search
+  evaluation. Does not support 16-bit precision floats.
+
+  *Default:* `False`
+
+* **`autodiff_backend`**
+
+  Which backend to use for automatic differentiation during constant
+  optimization. Currently `"Zygote"`, `"Mooncake"`, and `"Enzyme"` are supported.
+  The default, `None`, uses forward-mode or finite difference.
+
+  *Default:* `None`
+
+### Determinism
+
+* **`random_state`**
+
+  Pass an int for reproducible results across multiple function calls.
+  See :term:`Glossary <random_state>`.
+
+  *Default:* `None`
+
+* **`deterministic`**
+
+  Make a PySR search give the same result every run.
+  To use this, you must turn off parallelism
+  (with `parallelism="serial"`),
+  and set `random_state` to a fixed seed.
+
+  *Default:* `False`
+
+* **`warm_start`**
+
+  Tells fit to continue from where the last call to fit finished.
+  If false, each call to fit will be fresh, overwriting previous results.
+  Plugin runtime state is reinitialized for each call to `fit`.
+
+  *Default:* `False`
+
+* **`guesses`**
+
+  Initial guesses for expressions to seed the search. Examples:
+  `["x0 + x1", "x0^2"]`, `[["x0"], ["x1"]]` (multi-output),
+  or `[{"f": "#1 + #2", "p": [5.0, 10.0]}]` for a
+  `TemplateExpressionSpec` with component `f` and parameter vector `p`.
+  Here `#1` and `#2` are the first and second arguments of `f`.
+  Parameter values use the data precision or the model's `TypeSpec`, and
+  supplied vectors must match the lengths declared by the template.
+  Parameter names may be omitted to retain their normal initialization.
+
+  *Default:* `None`
+
+### Monitoring
+
+* **`verbosity`**
+
+  What verbosity level to use. 0 means minimal print statements.
+
+  *Default:* `1`
+
+* **`update_verbosity`**
+
+  What verbosity level to use for package updates.
+  Will take value of `verbosity` if not given.
+
+  *Default:* `None`
+
+* **`print_precision`**
+
+  How many significant digits to print for floats.
+
+  *Default:* `5`
+
+* **`progress`**
+
+  Whether to use a progress bar instead of printing to stdout.
+
+  *Default:* `True`
+
+* **`logger_spec`**
+
+  Logger specification for the Julia backend. See, for example,
+  `TensorBoardLoggerSpec`.
+
+  *Default:* `None`
+
+* **`input_stream`**
+
+  The stream to read user input from, used for the `'q'` + `<enter>`
+  command that stops a search early. `None` reads from `"stdin"` when
+  attached to an interactive terminal and otherwise disables stdin
+  watching via `"devnull"` (for example in Jupyter, where typed input
+  never reaches the search). You can also pass `"stdin"` or `"devnull"`
+  explicitly, or reference an arbitrary Julia object in the `Main`
+  namespace.
+
+  *Default:* `None`
+
+* **`use_tracing`**
+
+  Whether to write a JSONL trace of the search to `tracing_file`.
+  One record per line holds the live members of one population at one
+  iteration, along with every mutation, crossover, tuning and death
+  event. Uses JSON.jl, which is installed into the Julia environment
+  on first use.
+
+  *Default:* `False`
+
+* **`tracing_file`**
+
+  Where to write the trace when `use_tracing` is set. Any existing
+  file is overwritten when the search starts.
+
+  *Default:* `"pysr_trace.jsonl"`
+
+### Environment
+
+* **`temp_equation_file`**
+
+  Whether to put the hall of fame file in the temp directory.
+  Deletion is then controlled with the `delete_tempfiles`
+  parameter.
+
+  *Default:* `False`
+
+* **`tempdir`**
+
+  directory for the temporary files.
+
+  *Default:* `None`
+
+* **`delete_tempfiles`**
+
+  Whether to delete the temporary files after finishing.
+
+  *Default:* `True`
+
+* **`update`**
+
+  Whether to automatically update Julia packages when `fit` is called.
+  You should make sure that PySR is up-to-date itself first, as
+  the packaged Julia packages may not necessarily include all
+  updated dependencies.
+
+  *Default:* `False`
+
+### Exporting the Results
+
+* **`output_directory`**
+
+  The base directory to save output files to. Files
+  will be saved in a subdirectory according to the run ID.
+  Will be set to `outputs/` if not provided.
+
+  *Default:* `None`
+
+* **`run_id`**
+
+  A unique identifier for the run. Will be generated using the
+  current date and time if not provided.
+
+  *Default:* `None`
+
+* **`output_jax_format`**
+
+  Whether to create a 'jax_format' column in the output,
+  containing jax-callable functions and the default parameters in
+  a jax array.
+
+  *Default:* `False`
+
+* **`output_torch_format`**
+
+  Whether to create a 'torch_format' column in the output,
+  containing a torch module with trainable parameters.
+
+  *Default:* `False`
+
+* **`extra_sympy_mappings`**
+
+  Provides mappings between custom `binary_operators` or
+  `unary_operators` defined in julia strings, to those same
+  operators defined in sympy.
+  E.G if `unary_operators=["inv(x)=1/x"]`, then for the fitted
+  model to be export to sympy, `extra_sympy_mappings`
+  would be `{"inv": lambda x: 1/x}`.
+
+  *Default:* `None`
+
+* **`extra_torch_mappings`**
+
+  The same as `extra_jax_mappings` but for model export
+  to pytorch. Note that the dictionary keys should be callable
+  pytorch expressions.
+  For example: `extra_torch_mappings={sympy.sin: torch.sin}`.
+
+  *Default:* `None`
+
+* **`extra_jax_mappings`**
+
+  Similar to `extra_sympy_mappings` but for model export
+  to jax. The dictionary maps sympy functions to jax functions.
+  For example: `extra_jax_mappings={sympy.sin: "jnp.sin"}` maps
+  the `sympy.sin` function to the equivalent jax expression `jnp.sin`.
+
+  *Default:* `None`
+
+## PySRRegressor Functions
+
+### fit
+
+`fit(self, X, y, *, Xresampled=None, weights=None, variable_names: 'ArrayLike[str] | None' = None, complexity_of_variables: 'int | float | list[int | float] | None' = None, X_units: 'ArrayLike[str] | None' = None, y_units: 'str | ArrayLike[str] | None' = None) -> "'PySRRegressor'"`
+
+Search for equations to fit the dataset and store them in `self.equations_`.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `X` | `ndarray \| pandas.DataFrame` | Training data of shape (n_samples, n_features). | *required* |
+| `y` | `ndarray \| pandas.DataFrame` | Target values of shape (n_samples,) or (n_samples, n_targets). Will be cast to X's dtype if necessary. | *required* |
+| `Xresampled` | `ndarray \| pandas.DataFrame` | Resampled training data, of shape (n_resampled, n_features), to generate a denoised data on. This will be used as the training data, rather than `X`. | `None` |
+| `weights` | `ndarray \| pandas.DataFrame` | Weight array of the same shape as `y`. Each element is how to weight the mean-square-error loss for that particular element of `y`. Alternatively, if a custom `loss` was set, it will can be used in arbitrary ways. | `None` |
+| `variable_names` | `list[str]` | A list of names for the variables, rather than "x0", "x1", etc. If `X` is a pandas dataframe, the column names will be used instead of `variable_names`. Cannot contain spaces or special characters. Avoid variable names which are also function names in `sympy`, such as "N". | `None` |
+| `X_units` | `list[str]` | A list of units for each variable in `X`. Each unit should be a string representing a Julia expression. See DynamicQuantities.jl https://ai.damtp.cam.ac.uk/dynamicquantities/dev/units for more information. | `None` |
+| `y_units` | `str \| list[str]` | Similar to `X_units`, but as a unit for the target variable, `y`. If `y` is a matrix, a list of units should be passed. If `X_units` is given but `y_units` is not, then `y_units` will be arbitrary. | `None` |
+
+**Returns**
+
+* **Type:** `object`
+* Fitted estimator.
+
+### predict
+
+`predict(self, X, index: 'int | list[int] | None' = None) -> 'ndarray'`
+
+Predict y from input X using the equation chosen by `model_selection`.
+
+You may see what equation is used by printing this object. X should
+have the same columns as the training data.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `X` | `ndarray \| pandas.DataFrame` | Training data of shape `(n_samples, n_features)`. | *required* |
+| `index` | `int \| list[int]` | If you want to compute the output of an expression using a particular row of `self.equations_`, you may specify the index here. For multiple output equations, you must pass a list of indices in the same order. | `None` |
+
+**Returns**
+
+* **Type:** `ndarray of shape (n_samples, nout_)`
+* Values predicted by substituting `X` into the fitted symbolic
+  regression model.
+
+**Raises**
+
+* **`ValueError`**: Raises if the `best_equation` cannot be evaluated.
+
+### from_file
+
+`from_file(equation_file: 'None' = None, *, run_directory: 'PathLike', binary_operators: 'list[str] | None' = None, unary_operators: 'list[str] | None' = None, operators: 'dict[int, list[str]] | None' = None, n_features_in: 'int | None' = None, feature_names_in: 'ArrayLike[str] | None' = None, selection_mask: 'NDArray[np.bool_] | None' = None, nout: 'int' = 1, **pysr_kwargs) -> "'PySRRegressor'"`
+
+Create a model from a saved model checkpoint or equation file.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `run_directory` | `str` | The directory containing outputs from a previous run. This is of the form `[output_directory]/[run_id]`. | *required* |
+| `binary_operators` | `list[str]` | The same binary operators used when creating the model. Not needed if loading from a pickle file. | `None` |
+| `unary_operators` | `list[str]` | The same unary operators used when creating the model. Not needed if loading from a pickle file. | `None` |
+| `operators` | `dict[int, list[str]]` | Operator mapping by arity used when creating the model. Provide this if the original run relied on the generic `operators` parameter. Not needed if loading from a pickle file. | `None` |
+| `n_features_in` | `int` | Number of features passed to the model. Not needed if loading from a pickle file. | `None` |
+| `feature_names_in` | `list[str]` | Names of the features passed to the model. Not needed if loading from a pickle file. | `None` |
+| `selection_mask` | `NDArray[np.bool_]` | If using `select_k_features`, you must pass `model.selection_mask_` here. Not needed if loading from a pickle file. | `None` |
+| `nout` | `int` | Number of outputs of the model. Not needed if loading from a pickle file. | `1` |
+| `**pysr_kwargs` | `dict` | Any other keyword arguments to initialize the PySRRegressor object. These will overwrite those stored in the pickle file. Not needed if loading from a pickle file. | *required* |
+
+**Returns**
+
+* **Type:** `PySRRegressor`
+* The model with fitted equations.
+
+### sympy
+
+`sympy(self, index: 'int | list[int] | None' = None)`
+
+Return sympy representation of the equation(s) chosen by `model_selection`.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `index` | `int \| list[int]` | If you wish to select a particular equation from `self.equations_`, give the index number here. This overrides the `model_selection` parameter. If there are multiple output features, then pass a list of indices with the order the same as the output feature. | `None` |
+
+**Returns**
+
+* **Type:** `str, list[str] of length nout_`
+* SymPy representation of the best equation.
+
+### latex
+
+`latex(self, index: 'int | list[int] | None' = None, precision: 'int' = 3) -> 'str | list[str]'`
+
+Return latex representation of the equation(s) chosen by `model_selection`.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `index` | `int \| list[int]` | If you wish to select a particular equation from `self.equations_`, give the index number here. This overrides the `model_selection` parameter. If there are multiple output features, then pass a list of indices with the order the same as the output feature. | `None` |
+| `precision` | `int` | The number of significant figures shown in the LaTeX representation. | `3` |
+
+**Returns**
+
+* **Type:** `str or list[str] of length nout_`
+* LaTeX expression of the best equation.
+
+### pytorch
+
+`pytorch(self, index=None)`
+
+Return pytorch representation of the equation(s) chosen by `model_selection`.
+
+Each equation (multiple given if there are multiple outputs) is a PyTorch module
+containing the parameters as trainable attributes. You can use the module like
+any other PyTorch module: `module(X)`, where `X` is a tensor with the same
+column ordering as trained with.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `index` | `int \| list[int]` | If you wish to select a particular equation from `self.equations_`, give the index number here. This overrides the `model_selection` parameter. If there are multiple output features, then pass a list of indices with the order the same as the output feature. | `None` |
+
+**Returns**
+
+* **Type:** `torch.nn.Module`
+* PyTorch module representing the expression.
+
+### jax
+
+`jax(self, index=None)`
+
+Return jax representation of the equation(s) chosen by `model_selection`.
+
+Each equation (multiple given if there are multiple outputs) is a dictionary
+containing {"callable": func, "parameters": params}. To call `func`, pass
+func(X, params). This function is differentiable using `jax.grad`.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `index` | `int \| list[int]` | If you wish to select a particular equation from `self.equations_`, give the index number here. This overrides the `model_selection` parameter. If there are multiple output features, then pass a list of indices with the order the same as the output feature. | `None` |
+
+**Returns**
+
+* **Type:** `dict[str, Any]`
+* Dictionary of callable jax function in "callable" key,
+  and jax array of parameters as "parameters" key.
+
+### latex_table
+
+`latex_table(self, indices: 'list[int] | None' = None, precision: 'int' = 3, columns: 'list[str]' = ['equation', 'complexity', 'loss', 'score']) -> 'str'`
+
+Create a LaTeX/booktabs table for all, or some, of the equations.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `indices` | `list[int] \| list[list[int]]` | If you wish to select a particular subset of equations from `self.equations_`, give the row numbers here. By default, all equations will be used. If there are multiple output features, then pass a list of lists. | `None` |
+| `precision` | `int` | The number of significant figures shown in the LaTeX representations. | `3` |
+| `columns` | `list[str]` | Which columns to include in the table. | `['equation', 'complexity', 'loss', 'score']` |
+
+**Returns**
+
+* **Type:** `str`
+* A string that will render a table in LaTeX of the equations.
+
+### refresh
+
+`refresh(self, run_directory: 'PathLike | None' = None) -> 'None'`
+
+Update self.equations\_ with any new options passed.
+
+For example, updating `extra_sympy_mappings`
+will require a `.refresh()` to update the equations.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `checkpoint_file` | `str or Path` | Path to checkpoint hall of fame file to be loaded. The default will use the set `equation_file_`. | *required* |
+
+## Expression Specifications
+
+### ExpressionSpec
+
+`ExpressionSpec()`
+
+The default expression specification, with no special behavior.
+
+### TemplateExpressionSpec
+
+`TemplateExpressionSpec(combine: 'str', expressions: 'list[str]', variable_names: 'list[str]', parameters: 'dict[str, int] | None' = None) -> None`
+
+Spec for templated expressions.
+
+This class allows you to specify how multiple sub-expressions should be combined
+in a structured way, with constraints on which variables each sub-expression can use.
+Pass this to PySRRegressor with the `expression_spec` argument.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `combine` | `str` | Julia function string that defines how the sub-expressions are combined. For example: "sin(f(x1, x2)) + g(x3)^2" would constrain f to use x1,x2 and g to use x3. | *required* |
+| `expressions` | `list[str]` | List of symbols representing the inner expressions (e.g., \["f", "g"]). These will be used as keys in the template structure. | *required* |
+| `variable_names` | `list[str]` | List of variable names that will be used in the combine function. | *required* |
+| `parameters` | `dict[str, int]` | Dictionary mapping parameter names to their lengths. For example, {"p1": 2, "p2": 1} means p1 is a vector of length 2 and p2 is a vector of length 1. These parameters will be optimized during the search. | `None` |
+
+### AbstractExpressionSpec
+
+`AbstractExpressionSpec()`
+
+Abstract base class describing expression types.
+
+This basically just holds the options for the expression type,
+as well as explains how to parse and evaluate them.
+
+All expression types must implement:
+
+1. julia_expression_spec(): The actual expression specification, returned as a Julia object.
+   This will get passed as `expression_spec` in `SymbolicRegression.Options`.
+2. create_exports(), which will be used to create the exports of the equations, such as
+   the executable format, the SymPy format, etc.
+
+Implementations may also declare the export formats they support.
+
+## Type Specifications
+
+### TypeSpec
+
+`TypeSpec(name: 'str', fields: 'dict[str, str]', sample: 'str', scalar_constants: 'str | None' = None, with_scalar_constants: 'str | None' = None, init: 'str | None' = None, mutate: 'str | None' = None, is_valid: 'str | None' = None, string: 'str | None' = None, preamble: 'str | None' = None, definitions: 'str | None' = None, loss_type: 'str | None' = None, init_invalid: 'str | None' = None) -> None`
+
+Definition of a custom value type for symbolic regression.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `name` | `str` | Name of the generated Julia type. Use this name in operator and hook definitions. | *required* |
+| `fields` | `dict[str, str]` | Ordered mapping from field names to Julia field types. | *required* |
+| `sample` | `str` | Julia callable with signature `rng -> (...)::{name}`. | *required* |
+| `scalar_constants` | `str` | Julia callable with signature `value::{name} -> (...)::Vector{Float64}`. Provide together with `with_scalar_constants` to enable continuous constant optimization. | `None` |
+| `with_scalar_constants` | `str` | Julia callable with signature `(value::{name}, scalar_constants::Vector{Float64}) -> (...)::{name}`. | `None` |
+| `init` | `str` | Julia callable with signature `() -> value::{name}`. The default repurposes `sample` using a deterministic local random-number generator. | `None` |
+| `mutate` | `str` | Julia callable with signature `(rng, value::{name}, temperature::Float64) -> value::{name}`. Use this to mutate a value of the type. The `temperature` (from simulated annealing) is between 0 and 1. High temperatures generally should be used for more aggressive mutations, and low temperatures for more conservative mutations. The default mutation repurposes `scalar_constants` and `with_scalar_constants` to mutate the set with SymbolicRegression.jl's default constant mutation, and put it back into a new value. | `None` |
+| `is_valid` | `str` | Julia callable with signature `value::{name} -> (...)::Bool`. Use this to check if your type is in a valid state. For example, if your type has been processed in a way that invalidates it (like a NaN, but specific to your type), you may use this function to check for that. This will be used to quit evaluation early. The default checks that every scalar constant is finite, or accepts every value for a non-optimizable type. | `None` |
+| `init_invalid` | `str` | Julia callable with signature `() -> value::{name}` that constructs an invalid value. The result must have this type and fail `is_valid`. Used by DynamicExpressions to fill failed convenience evaluations. Omit this hook for types with no invalid state. It receives no prototype or shape information. | `None` |
+| `string` | `str` | Julia callable with signature `value::{name} -> (...)::AbstractString` used to print values. | `None` |
+| `preamble` | `str` | Julia source evaluated once before the generated type definition. Types and functions it defines are visible to the hooks and to operator and objective sources; imports are not, so any source needing a package beyond SymbolicRegression must import it itself. | `None` |
+| `definitions` | `str` | Julia source evaluated once directly after the generated type, for constructors and methods that mention it. | `None` |
+| `loss_type` | `str` | Concrete Julia `AbstractFloat` type returned by a custom full objective. Elementwise loss return types are inferred. | `None` |
+
+## Logger Specifications
+
+### TensorBoardLoggerSpec
+
+`TensorBoardLoggerSpec(log_dir: 'str' = 'logs/run', log_interval: 'int' = 1, overwrite: 'bool' = False) -> None`
+
+Specification for TensorBoard logger.
+
+**Parameters**
+
+| Name | Type | Description | Default |
+|------|------|-------------|---------|
+| `log_dir` | `str` | Directory where TensorBoard logs will be saved. If `overwrite` is `False`, new logs will be saved to `{log_dir}_1`, and so on. | `'logs/run'` |
+| `log_interval` | `int` | Interval (in steps) at which logs are written. Default is 10. | `1` |
+| `overwrite` | `bool` | Whether to overwrite existing logs in the directory. Default is False. | `False` |
+
+### AbstractLoggerSpec
+
+`AbstractLoggerSpec()`
+
+Abstract base class for logger specifications.
+
+## Mutations
+
+### ConstantMutation
+
+`ConstantMutation(perturbation_factor: 'float' = 0.086, probability_negate: 'float' = 0.01) -> None`
+
+Perturb a constant.
+
+SymbolicRegression.jl default weight: `0.0346`.
+
+Defaults match SymbolicRegression.jl.
+
+### OperatorMutation
+
+`OperatorMutation() -> None`
+
+Replace an operator with another operator of the same arity.
+
+SymbolicRegression.jl default weight: `0.293`.
+
+### FeatureMutation
+
+`FeatureMutation() -> None`
+
+Change the feature referenced by a variable node.
+
+SymbolicRegression.jl default weight: `0.1`.
+
+### SwapOperandsMutation
+
+`SwapOperandsMutation() -> None`
+
+Swap the operands of a binary operator.
+
+SymbolicRegression.jl default weight: `0.198`.
+
+### AddNodeMutation
+
+`AddNodeMutation() -> None`
+
+Append a node to the expression.
+
+SymbolicRegression.jl default weight: `2.47`.
+
+### InsertNodeMutation
+
+`InsertNodeMutation() -> None`
+
+Insert a node above an existing node.
+
+SymbolicRegression.jl default weight: `0.0112`.
+
+### DeleteNodeMutation
+
+`DeleteNodeMutation() -> None`
+
+Delete a node from the expression.
+
+SymbolicRegression.jl default weight: `0.870`.
+
+### RotateTreeMutation
+
+`RotateTreeMutation() -> None`
+
+Rotate a subtree.
+
+SymbolicRegression.jl default weight: `4.26`.
+
+### BacksolveMutation
+
+`BacksolveMutation(max_library_size: 'int' = 500, max_terms: 'int' = 8, min_improvement: 'float' = 0.001, node_attempts: 'int' = 8) -> None`
+
+Fit a replacement expression by backsolving through the expression.
+
+SymbolicRegression.jl default weight: `0.0`.
+
+### SimplifyMutation
+
+`SimplifyMutation() -> None`
+
+Simplify constant parts of the expression.
+
+SymbolicRegression.jl default weight: `0.00209`.
+
+### RandomizeMutation
+
+`RandomizeMutation() -> None`
+
+Replace the expression with a random expression.
+
+SymbolicRegression.jl default weight: `0.000502`.
+
+### OptimizeMutation
+
+`OptimizeMutation() -> None`
+
+Optimize constants as a mutation.
+
+SymbolicRegression.jl default weight: `0.0`.
+
+### DoNothingMutation
+
+`DoNothingMutation() -> None`
+
+Leave the expression unchanged.
+
+SymbolicRegression.jl default weight: `0.273`.
+
+### AbstractMutation
+
+`AbstractMutation()`
+
+Base class for mutation configurations.
+
+## Plugins
+
+### AdaptiveMutationWeightsPlugin
+
+`AdaptiveMutationWeightsPlugin(smoothing: 'float' = 0.02, floor: 'float' = 0.05, reward: "Literal['cost', 'loss']" = 'cost') -> None`
+
+Adapt mutation weights from their observed success rates.
+
+Enabled by default in PySR. Pass an explicit `default_plugins` that
+omits this plugin to disable it.
+Learned runtime state is reinitialized for each call to `fit`.
+
+### AdaptiveParsimonyPlugin
+
+`AdaptiveParsimonyPlugin(tournament: 'bool' = True, mutation_acceptance: 'bool' = True) -> None`
+
+Apply frequency-based parsimony during selection and mutation.
+
+Enabled by default in PySR through `use_frequency=True` and
+`use_frequency_in_tournament=True`.
+
+### MutationBurstPlugin
+
+`MutationBurstPlugin(retry_attempts: 'int' = 4, compound_probability: 'float' = 0.25, compound_max_steps: 'int' = 2) -> None`
+
+Retry rejected mutations and optionally chain accepted mutations.
+
+Disabled by default in PySR.
+
+### SimulatedAnnealingPlugin
+
+`SimulatedAnnealingPlugin(alpha: 'float' = 0.1) -> None`
+
+Apply simulated annealing during mutation acceptance.
+
+Enabled by default through `annealing=True`.
+
+### AbstractPlugin
+
+`AbstractPlugin()`
+
+Base class for plugin configurations.
+
+---
+
+---
+url: https://pysr.ai/dev/operators.md
+---
+# Operators
+
+## Pre-defined
+
+First, note that pretty much any valid Julia function which
+takes one or two scalars as input, and returns on scalar as output,
+is likely to be a valid operator\[^1].
+A selection of these and other valid operators are stated below.
+
+Also, note that it's a good idea to not use too many operators, since
+it can exponentially increase the search space.
+
+### Unary Operators
+
+| Basic      | Exp/Log    | Trig      | Hyperbolic | Special   | Rounding   |
+|------------|------------|-----------|------------|-----------|------------|
+| `neg`      | `exp`      | `sin`     | `sinh`     | `erf`     | `round`    |
+| `square`   | `log`      | `cos`     | `cosh`     | `erfc`    | `floor`    |
+| `cube`     | `log10`    | `tan`     | `tanh`     | `gamma`   | `ceil`     |
+| `cbrt`     | `log2`     | `asin`    | `asinh`    | `relu`    |            |
+| `sqrt`     | `log1p`    | `acos`    | `acosh`    | `sinc`    |            |
+| `abs`      |            | `atan`    | `atanh`    |           |            |
+| `sign`     |            |           |            |           |            |
+| `inv`      |            |           |            |           |            |
+
+### Binary Operators
+
+| Arithmetic    | Comparison | Logic    |
+|--------------|------------|----------|
+| `+`          | `max`      | `logical_or`\[^2] |
+| `-`          | `min`      | `logical_and`\[^3]|
+| `*`          | `>`\[^4]    |                 |
+| `/`          | `>=`       |                 |
+| `^`          | `<`        |                 |
+|              | `<=`       |                 |
+|              | `cond`\[^5] |                 |
+|              | `mod`      |                 |
+
+### Higher Arity Operators
+
+| Ternary      |
+|--------------|
+| `clamp`      |
+| `fma` / `muladd` |
+| `max`        |
+| `min`        |
+
+Note that to use operators with arity 3 or more, you must use the `operators` parameter instead of the `*ary_operators` parameters, and pass operators as a dictionary with the arity as key:
+
+```python
+operators={
+    1: ["sin"], 2: ["+", "-", "*"], 3: ["clamp"]
+},
+```
+
+## Custom
+
+Instead of passing a predefined operator as a string,
+you can just define a custom function as Julia code. For example:
+
+```python
+    PySRRegressor(
+        ...,
+        unary_operators=["myfunction(x) = x^2"],
+        binary_operators=["myotherfunction(x, y) = x^2*y"],
+        extra_sympy_mappings={
+            "myfunction": lambda x: x**2,
+            "myotherfunction": lambda x, y: x**2 * y,
+        },
+    )
+```
+
+Make sure that it works with
+`Float32` as a datatype (for default precision, or `Float64` if you set `precision=64`). That means you need to write `1.5f3`
+instead of `1.5e3`, if you write any constant numbers, or simply convert a result to `Float64(...)`.
+
+PySR expects that operators not throw an error for any input value over the entire real line from `-3.4e38` to `+3.4e38`.
+Thus, for invalid inputs, such as negative numbers to a `sqrt` function, you may simply return a `NaN` of the same type as the input. For example,
+
+```julia
+my_sqrt(x) = x >= 0 ? sqrt(x) : convert(typeof(x), NaN)
+```
+
+would be a valid operator. The genetic algorithm
+will preferentially selection expressions which avoid
+any invalid values over the training dataset.
+
+\[^1]: However, you will need to define a sympy equivalent in `extra_sympy_mapping` if you want to use a function not in the above list.
+\[^2]: `logical_or` is equivalent to `(x, y) -> (x > 0 || y > 0) ? 1 : 0`
+\[^3]: `logical_and` is equivalent to `(x, y) -> (x > 0 && y > 0) ? 1 : 0`
+\[^4]: `>` is equivalent to `(x, y) -> x > y ? 1 : 0`
+\[^5]: `cond` is equivalent to `(x, y) -> x > 0 ? y : 0`
+
+---
+
+---
+url: https://pysr.ai/dev/options.md
+---
+# Features and Options
+
+Some configurable features and options in `PySR` which you
+may find useful include:
+
+* [Selecting from the accuracy-complexity curve](#model-selection)
+* [Operators](#operators)
+* [Number of outer search iterations](#iterations)
+* [Number of inner search iterations](#cycles-per-iteration)
+* [Multi-processing](#processors)
+* [Populations](#populations)
+* [Data weighting](#weighted-data)
+* [Max complexity and depth](#max-size)
+* [Mini-batching](#batching)
+* [Variable names](#variable-names)
+* [Constraining use of operators](#constraining-use-of-operators)
+* [Custom complexities](#custom-complexity)
+* [LaTeX and SymPy](#latex-and-sympy)
+* [Exporting to numpy, pytorch, and jax](#exporting-to-numpy-pytorch-and-jax)
+* [Loss functions](#loss)
+* [Model loading](#model-loading)
+
+These are described below.
+Also check out the [tuning page](tuning.md) for workflow tips.
+
+The program will output a pandas DataFrame containing the equations
+to `PySRRegressor.equations` containing the loss value
+and complexity.
+
+It will also dump to a csv
+at the end of every iteration,
+which is `.hall_of_fame_{date_time}.csv` by default.
+It also prints the equations to stdout.
+
+## Model selection
+
+By default, `PySRRegressor` uses `model_selection='best'`
+which selects an equation from `PySRRegressor.equations_` using
+a combination of accuracy and complexity.
+You can also select `model_selection='accuracy'`.
+
+By printing a model (i.e., `print(model)`), you can see
+the equation selection with the arrow shown in the `pick` column.
+
+## Operators
+
+A list of operators can be found on the [operators page](operators.md).
+One can define custom operators in Julia by passing a string:
+
+```python
+PySRRegressor(niterations=100,
+    binary_operators=["mult", "plus", "special(x, y) = x^2 + y"],
+    extra_sympy_mappings={'special': lambda x, y: x**2 + y},
+    unary_operators=["cos"])
+```
+
+Now, the symbolic regression code can search using this `special` function
+that squares its left argument and adds it to its right. Make sure
+all passed functions are valid Julia code, and take one (unary)
+or two (binary) float32 scalars as input, and output a float32. This means if you
+write any real constants in your operator, like `2.5`, you have to write them
+instead as `2.5f0`, which defines it as `Float32`.
+Operators are automatically vectorized.
+
+One should also define `extra_sympy_mappings`,
+so that the SymPy code can understand the output equation from Julia,
+when constructing a useable function. This step is optional, but
+is necessary for the `lambda_format` to work.
+
+## Iterations
+
+This is the total number of generations that `pysr` will run for.
+I usually set this to a large number, and exit when I am satisfied
+with the equations.
+
+## Cycles per iteration
+
+Each cycle considers every 10-equation subsample (re-sampled for each individual 10,
+unless `fast_cycle` is set in which case the subsamples are separate groups of equations)
+a single time, producing one mutated equation for each.
+The parameter `ncycles_per_iteration` defines how many times this
+occurs before the equations are compared to the hall of fame,
+and new equations are migrated from the hall of fame, or from other populations.
+It also controls how slowly annealing occurs. You may find that increasing
+`ncycles_per_iteration` results in a higher cycles-per-second, as the head
+worker needs to reduce and distribute new equations less often, and also increases
+diversity. But at the same
+time, a smaller number it might be that migrating equations from the hall of fame helps
+each population stay closer to the best current equations.
+
+## Processors
+
+One can adjust the number of workers used by Julia with the
+`procs` option. You should set this equal to the number of cores
+you want `pysr` to use.
+
+## Populations
+
+By default, `populations=15`, but you can set a different
+number of populations with this option.
+More populations may increase
+the diversity of equations discovered, though will take longer to train.
+However, it is usually more efficient to have `populations>procs`,
+as there are multiple populations running
+on each core.
+
+## Weighted data
+
+Here, we assign weights to each row of data
+using inverse uncertainty squared. We also use 10 processes for the search
+instead of the default.
+
+```python
+sigma = ...
+weights = 1/sigma**2
+
+model = PySRRegressor(procs=10)
+model.fit(X, y, weights=weights)
+```
+
+## Max size
+
+`maxsize` controls the maximum size of equation (number of operators,
+constants, variables). `maxdepth` is by default not used, but can be set
+to control the maximum depth of an equation. These will make processing
+faster, as longer equations take longer to test.
+
+One can warm up the maxsize from a small number to encourage
+PySR to start simple, by using the `warmupMaxsize` argument.
+This specifies that maxsize increases every `warmupMaxsize`.
+
+## Batching
+
+One can turn on mini-batching, with the `batching` flag,
+and control the batch size with `batch_size`. This will make
+evolution faster for large datasets. Equations are still evaluated
+on the entire dataset at the end of each iteration to compare to the hall
+of fame, but only on a random subset during mutations and annealing.
+
+## Variable Names
+
+You can pass a list of strings naming each column of `X` with
+`variable_names`. Alternatively, you can pass `X` as a pandas dataframe
+and the columns will be used as variable names. Make sure only
+alphabetical characters and `_` are used in these names.
+
+## Constraining use of operators
+
+One can limit the complexity of specific operators with the `constraints` parameter.
+There is a "maxsize" parameter to PySR, but there is also an operator-level
+"constraints" parameter. One supplies a dict, like so:
+
+```python
+constraints={'pow': (-1, 1), 'mult': (3, 3), 'cos': 5}
+```
+
+What this says is that: a power law $x^y$ can have an expression of arbitrary (-1) complexity in the x, but only complexity 1 (e.g., a constant or variable) in the y. So $(x_0 + 3)^{5.5}$ is allowed, but $5.5^{x_0 + 3}$ is not.
+I find this helps a lot for getting more interpretable equations.
+The other terms say that each multiplication can only have sub-expressions
+of up to complexity 3 (e.g., $5.0 + x_2$) in each side, and cosine can only operate on
+expressions of complexity 5 (e.g., $5.0 + x_2 exp(x_3)$).
+
+## Custom complexity
+
+By default, all operators, constants, and instances of variables
+have a complexity of 1. The sum of the complexities of all terms
+is the total complexity of an expression.
+You may change this by configuring the options:
+
+* `complexity_of_operators` - pass a dictionary of `<str>: <int>` pairs
+  to change the complexity of each operator. If an operator is not
+  specified, it will have the default complexity of 1.
+* `complexity_of_constants` - supplying an integer will make all constants
+  have that complexity.
+* `complexity_of_variables` - supplying an integer will make all variables
+  have that complexity.
+
+## LaTeX and SymPy
+
+After running `model.fit(...)`, you can look at
+`model.equations` which is a pandas dataframe.
+The `sympy_format` column gives sympy equations,
+and the `lambda_format` gives callable functions.
+You can optionally pass a pandas dataframe to the callable function,
+if you called `.fit` on a pandas dataframe as well.
+
+There are also some helper functions for doing this quickly.
+
+* `model.latex()` will generate a TeX formatted output of your equation.
+  * `model.latex_table(indices=[2, 5, 8])` will generate a formatted LaTeX table including all the specified equations.
+* `model.sympy()` will return the SymPy representation.
+* `model.jax()` will return a callable JAX function combined with parameters (see below)
+* `model.pytorch()` will return a PyTorch model (see below).
+
+## Exporting to numpy, pytorch, and jax
+
+By default, the dataframe of equations will contain columns
+with the identifier `lambda_format`.
+These are simple functions which correspond to the equation, but executed
+with numpy functions.
+You can pass your `X` matrix to these functions
+just as you did to the `model.fit` call. Thus, this allows
+you to numerically evaluate the equations over different output.
+
+Calling `model.predict` will execute the `lambda_format` of
+the best equation, and return the result. If you selected
+`model_selection="best"`, this will use an equation that combines
+accuracy with simplicity. For `model_selection="accuracy"`, this will just
+look at accuracy.
+
+One can do the same thing for PyTorch, which uses code
+from [sympytorch](https://github.com/patrick-kidger/sympytorch),
+and for JAX, which uses code from
+[sympy2jax](https://github.com/MilesCranmer/sympy2jax).
+
+Calling `model.pytorch()` will return
+a PyTorch module which runs the equation, using PyTorch functions,
+over `X` (as a PyTorch tensor). This is differentiable, and the
+parameters of this PyTorch module correspond to the learned parameters
+in the equation, and are trainable.
+
+```python
+torch_model = model.pytorch()
+torch_model(X)
+```
+
+**Warning: If you are using custom operators, you must define `extra_torch_mappings` or `extra_jax_mappings` (both are `dict` of callables) to provide an equivalent definition of the functions.** (At any time you can set these parameters or any others with `model.set_params`.)
+
+For JAX, you can equivalently call `model.jax()`
+This will return a dictionary containing a `'callable'` (a JAX function),
+and `'parameters'` (a list of parameters in the equation).
+You can execute this function with:
+
+```python
+jax_model = model.jax()
+jax_model['callable'](X, jax_model['parameters'])
+```
+
+Since the parameter list is a jax array, this therefore lets you also
+train the parameters within JAX (and is differentiable).
+
+## `loss`
+
+The default loss is mean-square error, and weighted mean-square error.
+One can pass an arbitrary Julia string to define a custom loss, using,
+e.g., `elementwise_loss="myloss(x, y) = abs(x - y)^1.5"`. For more details,
+see the
+[Losses](https://julia.pysr.ai/dev/losses)
+page for SymbolicRegression.jl.
+
+Here are some additional examples:
+
+abs(x-y) loss
+
+```python
+PySRRegressor(..., elementwise_loss="f(x, y) = abs(x - y)^1.5")
+```
+
+Note that the function name doesn't matter:
+
+```python
+PySRRegressor(..., elementwise_loss="loss(x, y) = abs(x * y)")
+```
+
+With weights:
+
+```python
+model = PySRRegressor(..., elementwise_loss="myloss(x, y, w) = w * abs(x - y)")
+model.fit(..., weights=weights)
+```
+
+Weights can be used in arbitrary ways:
+
+```python
+model = PySRRegressor(..., weights=weights, elementwise_loss="myloss(x, y, w) = abs(x - y)^2/w^2")
+model.fit(..., weights=weights)
+```
+
+Built-in loss (faster) (see [losses](https://julia.pysr.ai/dev/losses)).
+This one computes the L3 norm:
+
+```python
+PySRRegressor(..., elementwise_loss="LPDistLoss{3}()")
+```
+
+Can also uses these losses for weighted (weighted-average):
+
+```python
+model = PySRRegressor(..., weights=weights, elementwise_loss="LPDistLoss{3}()")
+model.fit(..., weights=weights)
+```
+
+## Model loading
+
+PySR will automatically save a pickle file of the model state
+when you call `model.fit`, once before the search starts,
+and again after the search finishes. The filename will
+have the same base name as the input file, but with a `.pkl` extension.
+You can load the saved model state with:
+
+```python
+model = PySRRegressor.from_file(pickle_filename)
+```
+
+If you have a long-running job and would like to load the model
+before completion, you can also do this. In this case, the model
+loading will use the `csv` file to load the equations, since the
+`csv` file is continually updated during the search. Once
+the search completes, the model including its equations will
+be saved to the pickle file, overwriting the existing version.
+
+---
+
+---
+url: https://pysr.ai/dev/api-advanced.md
+---
+# Internal Reference
+
+## Julia Interface
+
+### init_julia
+
+`init_julia(*args, **kwargs)`
+
+*No documentation available.*
+
+### install
+
+`install(*args, **kwargs)`
+
+*No documentation available.*
+
+## Exporting to LaTeX
+
+### sympy2latex
+
+`sympy2latex(expr, prec=3, full_prec=True, **settings) -> 'str'`
+
+Convert sympy expression to LaTeX with custom precision.
+
+### sympy2latextable
+
+`sympy2latextable(equations: 'pd.DataFrame', indices: 'list[int] | None' = None, precision: 'int' = 3, columns: 'list[str]' = ['equation', 'complexity', 'loss', 'score'], max_equation_length: 'int' = 50, output_variable_name: 'str' = 'y') -> 'str'`
+
+Generate a booktabs-style LaTeX table for a single set of equations.
+
+### sympy2multilatextable
+
+`sympy2multilatextable(equations: 'list[pd.DataFrame]', indices: 'list[list[int]] | None' = None, precision: 'int' = 3, columns: 'list[str]' = ['equation', 'complexity', 'loss', 'score'], output_variable_names: 'list[str] | None' = None) -> 'str'`
+
+Generate multiple latex tables for a list of equation sets.
+
+### generate_table_environment
+
+`generate_table_environment(columns: 'list[str]' = ['equation', 'complexity', 'loss']) -> 'tuple[str, str]'`
+
+*No documentation available.*
+
+## Exporting to JAX
+
+### sympy2jax
+
+`sympy2jax(expression, symbols_in, selection=None, extra_jax_mappings=None)`
+
+Returns a function f and its parameters;
+
+the function takes an input matrix, and a list of arguments:
+f(X, parameters)
+where the parameters appear in the JAX equation.
+
+**Examples**
+
+Let's create a function in SymPy:
+
+```python
+x, y = symbols('x y')
+cosx = 1.0 * sympy.cos(x) + 3.2 * y
+```
+
+Let's get the JAX version. We pass the equation, and
+the symbols required.
+
+```python
+f, params = sympy2jax(cosx, [x, y])
+```
+
+The order you supply the symbols is the same order
+you should supply the features when calling
+the function `f` (shape `[nrows, nfeatures]`).
+In this case, features=2 for x and y.
+The `params` in this case will be
+`jnp.array([1.0, 3.2])`. You pass these parameters
+when calling the function, which will let you change them
+and take gradients.
+
+Let's generate some JAX data to pass:
+
+```python
+key = random.PRNGKey(0)
+X = random.normal(key, (10, 2))
+```
+
+We can call the function with:
+
+```python
+f(X, params)
+
+#> DeviceArray([-2.6080756 ,  0.72633684, -6.7557726 , -0.2963162 ,
+#                6.6014843 ,  5.032483  , -0.810931  ,  4.2520013 ,
+#                3.5427954 , -2.7479894 ], dtype=float32)
+```
+
+We can take gradients with respect
+to the parameters for each row with JAX
+gradient parameters now:
+
+```python
+jac_f = jax.jacobian(f, argnums=1)
+jac_f(X, params)
+
+#> DeviceArray([[ 0.49364874, -0.9692889 ],
+#               [ 0.8283714 , -0.0318858 ],
+#               [-0.7447336 , -1.8784496 ],
+#               [ 0.70755106, -0.3137085 ],
+#               [ 0.944834  ,  1.767703  ],
+#               [ 0.51673377,  1.4111717 ],
+#               [ 0.87347716, -0.52637756],
+#               [ 0.8760679 ,  1.0549792 ],
+#               [ 0.9961824 ,  0.79581654],
+#               [-0.88465923, -0.5822907 ]], dtype=float32)
+```
+
+We can also JIT-compile our function:
+
+```python
+compiled_f = jax.jit(f)
+compiled_f(X, params)
+
+#> DeviceArray([-2.6080756 ,  0.72633684, -6.7557726 , -0.2963162 ,
+#                6.6014843 ,  5.032483  , -0.810931  ,  4.2520013 ,
+#                3.5427954 , -2.7479894 ], dtype=float32)
+```
+
+### sympy2jaxtext
+
+`sympy2jaxtext(expr, parameters, symbols_in, extra_jax_mappings=None)`
+
+*No documentation available.*
+
+## Exporting to PyTorch
+
+### sympy2torch
+
+`sympy2torch(expression, symbols_in, selection=None, extra_torch_mappings=None)`
+
+Returns a module for a given sympy expression with trainable parameters;
+
+This function will assume the input to the module is a matrix X, where
+each column corresponds to each symbol you pass in `symbols_in`.
+
+---
+
+---
+url: https://pysr.ai/dev/tuning.md
+---
+# Tuning and Workflow Tips
+
+I give a short guide below on how I like to tune PySR for my applications.
+
+First, my general tips would be to avoid using redundant operators, like how `pow` can do the same things as `square`, or how `-` (binary) and `neg` (unary) are equivalent. The fewer operators the better! Only use operators you need.
+
+When running PySR, I usually do the following:
+
+I run from IPython (Jupyter Notebooks don't work as well\[^1]) on the head node of a slurm cluster. Passing `cluster_manager="slurm"` will make PySR set up a run over the entire allocation. I set `procs` equal to the total number of tasks across my entire allocation (see the [Slurm page](slurm.md) for a complete multi-node example).
+
+I use the [tensorboard feature](/examples/instrumentation#using-tensorboard-for-logging) for experiment tracking.
+
+\[^1]: Jupyter Notebooks are supported by PySR, but miss out on some useful features available in IPython and Python: the progress bar, and early stopping with "q". Interrupting a search in Jupyter returns the equations found so far.
+
+1. I start by using the default parameters.
+2. I use only the operators I think it needs and no more.
+3. Increase `populations` to `3*num_cores`.
+4. If my dataset is more than 1000 points, I either subsample it (low-dimensional and not much noise) or set `batching=True` (high-dimensional or very noisy, so it needs to evaluate on all the data).
+5. While on a laptop or single node machine, you might leave the default `ncycles_per_iteration`, on a cluster with ~100 cores I like to set `ncycles_per_iteration` to maybe `5000` or so, until the head node occupation is under `10%`. (A larger value means the workers talk less frequently to eachother, which is useful when you have many workers!)
+6. Set `constraints` and `nested_constraints` as strict as possible. These can help quite a bit with exploration. Typically, if I am using `pow`, I would set `constraints={"pow": (9, 1)}`, so that power laws can only have a variable or constant as their exponent. If I am using `sin` and `cos`, I also like to set `nested_constraints={"sin": {"sin": 0, "cos": 0}, "cos": {"sin": 0, "cos": 0}}`, so that sin and cos can't be nested, which seems to happen frequently. (Although in practice I would just use `sin`, since the search could always add a phase offset!)
+7. Set `maxsize` a bit larger than the final size you want. e.g., if you want a final equation of size `30`, you might set this to `35`, so that it has a bit of room to explore.
+8. I typically don't use `maxdepth`, but if I do, I set it strictly, while also leaving a bit of room for exploration. e.g., if you want a final equation limited to a depth of `5`, you might set this to `6` or `7`, so that it has a bit of room to explore.
+9. Set `parsimony` equal to about the minimum loss you would expect, divided by 5-10. e.g., if you expect the final equation to have a loss of `0.001`, you might set `parsimony=0.0001`.
+10. Set `weight_optimize` to some larger value, maybe `0.001`. This is very important if `ncycles_per_iteration` is large, so that optimization happens more frequently.
+11. Set `turbo` to `True`. This turns on advanced loop vectorization, but is still quite experimental. It should give you a nice 20% or more speedup.
+12. For final runs, after I have tuned everything, I typically set `niterations` to some very large value, and just let it run for a week until my job finishes (genetic algorithms tend not to converge, they can look like they settle down, but then find a new family of expression, and explore a new space). If I am satisfied with the current equations (which are visible either in the terminal or in the saved csv file), I quit the job early.
+
+Since I am running in IPython, I can just hit `q` and then `<enter>` to stop the job, tweak the hyperparameters, and then start the search again.
+I can also use `warm_start=True` if I wish to continue where I left off (though note that changing some parameters, like `maxsize`, are incompatible with warm starts).
+
+Some things I try out to see if they help:
+
+1. Play around with `complexity_of_operators`. Set operators you dislike (e.g., `pow`) to have a larger complexity.
+2. Try setting `adaptive_parsimony_scaling` a bit larger, maybe up to `1000`.
+3. Sometimes I try using `warmup_maxsize_by`. This is useful if you find that the search finds a very complex equation very quickly, and then gets stuck. It basically forces it to start at the simpler equations and build up complexity slowly.
+4. Play around with different losses:
+   * I typically try `L2DistLoss()` and `L1DistLoss()`. L1 loss is more robust to outliers compared to L2 (L1 finds the median, while L2 finds the mean of a random variable), so is often a good choice for a noisy dataset.
+   * I might also provide the `weights` parameter to `fit` if there is some reasonable choice of weighting. For example, maybe I know the signal-to-noise of a particular row of `y` - I would set that SNR equal to the weights. Or, perhaps I do some sort of importance sampling, and weight the rows by importance.
+
+Very rarely I might also try tuning the mutation weights, the crossover probability, or the optimization parameters. I never use `denoise` or `select_k_features` as I find they aren't very useful.
+
+For large datasets I usually just randomly sample ~1000 points or so. In case all the points matter, I might use `batching=True`.
+
+If I find the equations get very complex and I'm not sure if they are numerically precise, I might set `precision=64`.
+
+Once a run is finished, I use the `PySRRegressor.from_file` function to load the saved search in a different process (requires the pickle file, and possibly also the `.csv` file if you quit early). I can then explore the equations, convert them to LaTeX, and plot their output.
+
+## More Tips
+
+You might also wish to explore the [discussions](https://github.com/astroautomata/PySR/discussions/) page for more tips, and to see if anyone else has had similar questions.
+Be sure to also read through the [reference](api.md).
+
+---
+
+---
+url: https://pysr.ai/dev/slurm.md
+---
+# Slurm (Multi-node)
+
+PySR supports running across multiple nodes in an existing Slurm allocation with
+`cluster_manager="slurm"`. Request the resources with `sbatch` or `salloc`, then
+PySR will launch Julia workers across the allocation using
+`SlurmClusterManager.jl`.
+
+For example, this job requests three workers on each of two nodes:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=pysr
+#SBATCH --partition=normal
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=3
+#SBATCH --time=01:00:00
+
+set -euo pipefail
+python pysr_script.py
+```
+
+The corresponding `pysr_script.py` is:
+
+```python
+import numpy as np
+from pysr import PySRRegressor
+
+X = np.random.RandomState(0).randn(1000, 2)
+y = X[:, 0] + 2 * X[:, 1]
+
+model = PySRRegressor(
+    niterations=200,
+    populations=2,
+    parallelism="multiprocessing",
+    cluster_manager="slurm",
+    procs=6,
+)
+model.fit(X, y)
+print(model)
+```
+
+Submit the job with:
+
+```bash
+sbatch pysr_job.sh
+```
+
+`procs` must equal the allocation's total task count, given by `--ntasks` or
+`--nodes` multiplied by `--ntasks-per-node`. Run the Python script once inside
+the allocation; do not wrap it in `srun`.
+
+---
+
+---
+url: https://pysr.ai/dev/backend.md
+---
+# Customization
+
+If you have explored the [options](options.md) and [PySRRegressor reference](api.md), and still haven't figured out how to specify a constraint or objective required for your problem, you might consider editing the backend.
+The backend of PySR is written as a pure Julia package under the name [SymbolicRegression.jl](https://github.com/astroautomata/SymbolicRegression.jl).
+This package is accessed with [`juliacall`](https://github.com/JuliaPy/PythonCall.jl), which allows us to transfer objects back and forth between the Python and Julia runtimes.
+
+PySR gives you access to everything in SymbolicRegression.jl, but there are some specific use-cases which require modifications to the backend itself.
+Generally you can do this as follows:
+
+## 1. Check out the source code
+
+Clone a copy of the backend as well as PySR:
+
+```bash
+git clone https://github.com/astroautomata/SymbolicRegression.jl
+git clone https://github.com/astroautomata/PySR
+```
+
+You may wish to check out the specific versions, which you can do with:
+
+```bash
+cd PySR
+git checkout <version>
+
+# You can see the current backend version in `pysr/juliapkg.json`
+cd ../SymbolicRegression.jl
+git checkout <backend_version>
+```
+
+## 2. Edit the source to your requirements
+
+The main search code can be found in `src/SymbolicRegression.jl`.
+
+Here are some tips:
+
+* The documentation for the backend is given [here](https://julia.pysr.ai/dev/).
+* Throughout the package, you will often see template functions which typically use a symbol `T` (such as in the string `where {T<:Real}`). Here, `T` is simply the datatype of the input data and stored constants, such as `Float32` or `Float64`. Writing functions in this way lets us write functions generic to types, while still having access to the specific type specified at compilation time.
+* Expressions are stored as binary trees, using the `Node{T}` type, described [here](https://julia.pysr.ai/dev/types#SymbolicRegression.CoreModule.EquationModule.Node).
+* For reference, the main loop itself is found in the `equation_search` function inside [`src/SymbolicRegression.jl`](https://github.com/astroautomata/SymbolicRegression.jl/blob/master/src/SymbolicRegression.jl).
+* Parts of the code which are typically edited by users include:
+  * [`src/CheckConstraints.jl`](https://github.com/astroautomata/SymbolicRegression.jl/blob/master/src/CheckConstraints.jl), particularly the function `check_constraints`. This function checks whether a given expression satisfies constraints, such as having a complexity lower than `maxsize`, and whether it contains any forbidden nestings of functions.
+    * Note that all expressions, *even intermediate expressions*, must comply with constraints. Therefore, make sure that evolution can still reach your desired expression (with one mutation at a time), before setting a hard constraint. In other cases you might want to instead put in the loss function.
+  * [`src/Options.jl`](https://github.com/astroautomata/SymbolicRegression.jl/blob/master/src/Options.jl), as well as the struct definition in [`src/OptionsStruct.jl`](https://github.com/astroautomata/SymbolicRegression.jl/blob/master/src/OptionsStruct.jl). This file specifies all the options used in the search: an instance of `Options` is typically available throughout every function in `SymbolicRegression.jl`. If you add new functionality to the backend, and wish to make it parameterizable (including from PySR), you should specify it in the options.
+
+## 3. Let PySR use the modified backend
+
+Once you have made your changes, you should edit the `pysr/juliapkg.json` file
+in the PySR repository to point to this local copy.
+Do this by removing the `"version"` key and adding a `"dev"` and `"path"` key:
+
+```json
+    ...
+    "packages": {
+        "SymbolicRegression": {
+            "uuid": "8254be44-1295-4e6a-a16d-46603ac705cb",
+            "dev": true,
+            "path": "/path/to/SymbolicRegression.jl"
+        },
+    ...
+```
+
+You can then install PySR with this modified backend by running:
+
+```bash
+cd PySR
+pip install .
+```
+
+For more information on `juliapkg.json`, see [`pyjuliapkg`](https://github.com/JuliaPy/pyjuliapkg).
+
+## Additional notes
+
+If you get comfortable enough with the backend, you might consider using the Julia package directly: the API is given on the [SymbolicRegression.jl documentation](https://julia.pysr.ai/dev/).
+
+If you make a change that you think could be useful to other users, don't hesitate to open a pull request on either the PySR or SymbolicRegression.jl repositories! Contributions are very appreciated.
+
+---
+
+---
+url: https://pysr.ai/dev/migration.md
+---
+# Migrating from v1 to v2
+
+PySR v2 upgrades the Julia backend from SymbolicRegression.jl v1.11 to v2.
+Most `PySRRegressor` constructor calls still work, but several search defaults
+changed. The old parametric-expression interface and v1 checkpoints do not
+carry over.
+
+Before upgrading, keep a copy of each run directory, including
+`hall_of_fame.csv`. Install v2 in a new Python environment if you need to keep a
+v1 environment available for old pickles or exact search reproduction.
+
+## Search defaults changed
+
+The following changes affect ordinary `PySRRegressor(...)` searches:
+
+| Setting | v1 default | v2 default |
+| --- | --- | --- |
+| `batching` | `False` | `"auto"` |
+| `batch_size` | `50` | `None` |
+| `annealing` | `False` | `True` |
+| `crossover_probability` | `0.0259` | `0.2` |
+| Mutation selection | Fixed v1 weights | New backend weights, adapted during the search |
+
+With `batching="auto"`, the backend enables batching for large datasets while
+still evaluating hall-of-fame candidates on the full dataset. With
+`batch_size=None`, it uses the full dataset for at most 1000 rows, then batches
+of 128, 256, or 512 as the dataset grows.
+
+The default mutation mix changed, including a new feature mutation that can
+replace the input referenced by a variable node. The
+`AdaptiveMutationWeightsPlugin` also updates mutation weights from observed
+success rates. A `weight_*` argument now supplies an initial weight, rather than
+a fixed weight, while that plugin is active.
+
+For a search close to the v1 defaults, set the changed values explicitly and
+omit the adaptive-mutation plugin:
+
+```python
+from pysr import AdaptiveParsimonyPlugin, PySRRegressor
+
+model = PySRRegressor(
+    batching=False,
+    batch_size=50,
+    annealing=False,
+    crossover_probability=0.0259,
+    default_plugins=[AdaptiveParsimonyPlugin()],
+    weight_add_node=2.47,
+    weight_insert_node=0.0112,
+    weight_delete_node=0.87,
+    weight_do_nothing=0.273,
+    weight_mutate_constant=0.0346,
+    weight_mutate_operator=0.293,
+    weight_mutate_feature=0.0,
+    weight_swap_operands=0.198,
+    weight_rotate_tree=4.26,
+    weight_randomize=0.000502,
+    weight_simplify=0.00209,
+    weight_optimize=0.0,
+    weight_backsolve=0.0,
+)
+```
+
+This preserves the v1 search configuration, but it does not make a run
+bit-for-bit identical. Backend implementation changes still alter random-number
+consumption and search trajectories.
+
+Two other backend changes can alter results:
+
+* Simplification now recomputes an expression's cost from scratch. Equivalent
+  expressions can therefore appear in a different hall-of-fame order.
+* Constant optimization can restart zero-valued constants, allowing trajectories
+  that v1 could not reach.
+
+Loss functions are now validated when `fit` is called. An `elementwise_loss` or
+`loss_function` with the wrong number of arguments raises a `ValueError` before
+the search starts.
+
+## Parametric expressions
+
+`ParametricExpressionSpec` and the `category=` argument to `fit` were removed.
+Use `TemplateExpressionSpec.parameters`, append the category to `X`, and index
+parameters from the template.
+
+A v1 model such as:
+
+```python
+from pysr import ParametricExpressionSpec, PySRRegressor
+
+model = PySRRegressor(
+    expression_spec=ParametricExpressionSpec(max_parameters=2),
+)
+model.fit(X, y, category=category)
+```
+
+becomes:
+
+```python
+import numpy as np
+from pysr import PySRRegressor, TemplateExpressionSpec
+
+n_categories = len(np.unique(category))
+spec = TemplateExpressionSpec(
+    combine="f(x1, x2, p1[category], p2[category])",
+    expressions=["f"],
+    variable_names=["x1", "x2", "category"],
+    parameters={"p1": n_categories, "p2": n_categories},
+)
+
+# Julia indexing starts at 1. Add one if Python categories start at 0.
+X_with_category = np.column_stack([X, category + 1])
+model = PySRRegressor(expression_spec=spec)
+model.fit(X_with_category, y)
+```
+
+The category column must also be present when calling `predict`.
+
+## Template expressions
+
+The deprecated `function_symbols=...` and positional constructor forms of
+`TemplateExpressionSpec` were replaced by explicit template fields. State the
+combining expression, inner expressions, and variable names directly:
+
+```python
+spec = TemplateExpressionSpec(
+    combine="sin(f(x1, x2)) + g(x3)^2",
+    expressions=["f", "g"],
+    variable_names=["x1", "x2", "x3"],
+)
+```
+
+This form also supports optimizable parameter vectors through
+`parameters={"p": length}`. See [Template expressions](examples.md#template-expressions)
+for complete examples.
+
+## Saved models and checkpoints
+
+v2 uses checkpoint schema 3. A v1 pickle has no compatible schema marker, so
+`pickle.load(...)` and `PySRRegressor.from_file(...)` reject it with an
+`Unsupported PySR checkpoint schema` error. Warm starts cannot cross the v1 to
+v2 boundary. Re-run the search under v2 if you need to continue evolution.
+
+For standard expressions, you can reconstruct the discovered equations from a
+copy of `hall_of_fame.csv`. Put the CSV in a run directory without the
+incompatible `checkpoint.pkl`, then provide the original operators and feature
+metadata:
+
+```python
+model = PySRRegressor.from_file(
+    run_directory="v1_csv_copy",
+    binary_operators=["+", "-", "*", "/"],
+    unary_operators=["sin", "cos"],
+    n_features_in=3,
+    feature_names_in=["x0", "x1", "x2"],
+)
+```
+
+Custom expression specifications may require a fresh search because their Julia
+objects cannot be reconstructed from the CSV alone.
+
+## v1 spellings that still work
+
+These forms emit a deprecation warning but retain their old behavior:
+
+* camelCase keyword arguments such as `fractionReplaced`, `npop`,
+  `weightMutateConstant`, and `crossoverProbability`; use snake_case instead.
+* `loss=` and `full_objective=`; use `elementwise_loss=` and `loss_function=`.
+* `multithreading=True` or `False`; use `parallelism="multithreading"` or
+  `parallelism="serial"`. Use `parallelism="multiprocessing", procs=N` for
+  process workers.
+* `.equations` and `.raw_julia_state_`; use `.equations_` and `.julia_state_`.
+* The `pysr()` function, `pysr.install()`, and `pysr.init_julia()`; use
+  `PySRRegressor`. Dependencies are installed when PySR is imported.
+
+These constructor arguments are accepted but ignored with a warning:
+
+* `julia_project` and `julia_kwargs`. Configure the backend through `juliapkg`;
+  see [Customizing the backend](backend.md).
+* `weights`, `variable_names`, and `Xresampled`. Pass them to `fit` instead.
+
+## New APIs in v2
+
+* **N-ary operators:** use
+  `operators={1: ["sin"], 2: ["+", "*"], 3: ["clamp"]}`. The legacy
+  `binary_operators` and `unary_operators` arguments still work, but cannot be
+  combined with `operators`. Constraints for n-ary operators use n-tuples, such
+  as `{"clamp": (-1, -1, 1)}`.
+* **First-class mutations, crossovers, and plugins:** configure weighted
+  instances with `mutations=` and `crossovers=`, and compose search behavior
+  with `plugins=`. See the [API reference](api.md#mutations).
+* **Custom value types:** `TypeSpec` supports expressions over strings, vectors,
+  tensors, structs, and other Julia value types. See
+  [Custom value types](examples.md#custom-value-types).
+* **Template parameters:** `TemplateExpressionSpec.parameters` supports learned
+  scalar or category-indexed parameter vectors.
+* **Equation guesses:** seed a search with `guesses=["sin(x1 * 2.1)", ...]`.
+  `fraction_replaced_guesses` controls their injection rate.
+* **Autodiff backends:** `autodiff_backend="Enzyme"` is available as an
+  experimental alternative to `"Zygote"`.
+* **Worker controls:** `worker_imports` loads Julia packages on multiprocessing
+  workers, and `worker_timeout` controls worker restart timeouts.
+* **Additional mutations:** `weight_mutate_feature` controls feature mutation.
+  Backsolve is disabled by default and can be configured with
+  `BacksolveMutation(...)` through `mutations=`.
+
+## Environment changes
+
+* The minimum versions are Python 3.10 and Julia 1.10.
