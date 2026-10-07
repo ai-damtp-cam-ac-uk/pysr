@@ -1,5 +1,5 @@
 ---
-url: https://pysr.ai/v2.6.2/examples.md
+url: https://pysr.ai/v2.7.0/examples.md
 ---
 # Examples
 
@@ -67,7 +67,7 @@ See the [Options section](/options) for other ways to configure the search.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/getting-started.md
+url: https://pysr.ai/v2.7.0/examples/getting-started.md
 ---
 # Getting started
 
@@ -226,7 +226,7 @@ print(model)
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/expression-specifications.md
+url: https://pysr.ai/v2.7.0/examples/expression-specifications.md
 ---
 # Expression specifications
 
@@ -703,7 +703,7 @@ recovery of every coefficient function. Expect an expensive search: a run took a
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/objectives.md
+url: https://pysr.ai/v2.7.0/examples/objectives.md
 ---
 # Objectives and losses
 
@@ -1032,7 +1032,7 @@ The complete runnable example is `examples/prng_period.py`.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/physics.md
+url: https://pysr.ai/v2.7.0/examples/physics.md
 ---
 # Physics and units
 
@@ -1216,7 +1216,7 @@ If the field $u$ has units $\mathrm{m,s^{-1}}$, then $u_x$ has units $\mathrm{s^
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/search-behaviour.md
+url: https://pysr.ai/v2.7.0/examples/search-behaviour.md
 ---
 # Search behaviour
 
@@ -1471,7 +1471,7 @@ Use `examples/backsolve_mutation.py` for the complete example.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/instrumentation.md
+url: https://pysr.ai/v2.7.0/examples/instrumentation.md
 ---
 # Instrumentation and workflow
 
@@ -1692,7 +1692,7 @@ Use `examples/agent_loop_guesses.py` for the complete handoff workflow.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/value-types.md
+url: https://pysr.ai/v2.7.0/examples/value-types.md
 ---
 # Value types
 
@@ -2100,7 +2100,7 @@ operator, and `x1` is the first named feature column. A matching guess is
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/examples/beyond-numeric-values.md
+url: https://pysr.ai/v2.7.0/examples/beyond-numeric-values.md
 ---
 # Beyond numeric values
 
@@ -2521,7 +2521,7 @@ The saved controller was evaluated with Gymnasium 1.2.2 and MuJoCo 3.3.7. Instal
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/api.md
+url: https://pysr.ai/v2.7.0/api.md
 ---
 # API Reference
 
@@ -3859,7 +3859,7 @@ Base class for plugin configurations.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/operators.md
+url: https://pysr.ai/v2.7.0/operators.md
 ---
 # Operators
 
@@ -3957,7 +3957,7 @@ any invalid values over the training dataset.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/options.md
+url: https://pysr.ai/v2.7.0/options.md
 ---
 # Features and Options
 
@@ -4273,7 +4273,7 @@ be saved to the pickle file, overwriting the existing version.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/api-advanced.md
+url: https://pysr.ai/v2.7.0/api-advanced.md
 ---
 # Internal Reference
 
@@ -4422,7 +4422,7 @@ each column corresponds to each symbol you pass in `symbols_in`.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/tuning.md
+url: https://pysr.ai/v2.7.0/tuning.md
 ---
 # Tuning and Workflow Tips
 
@@ -4479,7 +4479,7 @@ Be sure to also read through the [reference](api.md).
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/slurm.md
+url: https://pysr.ai/v2.7.0/slurm.md
 ---
 # Slurm (Multi-node)
 
@@ -4535,7 +4535,7 @@ the allocation; do not wrap it in `srun`.
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/backend.md
+url: https://pysr.ai/v2.7.0/backend.md
 ---
 # Customization
 
@@ -4616,7 +4616,7 @@ If you make a change that you think could be useful to other users, don't hesita
 ---
 
 ---
-url: https://pysr.ai/v2.6.2/migration.md
+url: https://pysr.ai/v2.7.0/migration.md
 ---
 # Migrating from v1 to v2
 

@@ -8,34 +8,34 @@ Coding agents should read the PySR agent skill before writing PySR code: https:/
 
 ### Getting Started
 
-- [Examples](https://pysr.ai/v2.6.2/examples.md)
+- [Examples](https://pysr.ai/v2.7.0/examples.md)
 
 ### Examples
 
-- [Getting started](https://pysr.ai/v2.6.2/examples/getting-started.md)
-- [Expression specifications](https://pysr.ai/v2.6.2/examples/expression-specifications.md)
-- [Objectives and losses](https://pysr.ai/v2.6.2/examples/objectives.md)
-- [Physics and units](https://pysr.ai/v2.6.2/examples/physics.md)
-- [Search behaviour](https://pysr.ai/v2.6.2/examples/search-behaviour.md)
-- [Instrumentation and workflow](https://pysr.ai/v2.6.2/examples/instrumentation.md)
-- [Value types](https://pysr.ai/v2.6.2/examples/value-types.md)
-- [Beyond numeric values](https://pysr.ai/v2.6.2/examples/beyond-numeric-values.md)
+- [Getting started](https://pysr.ai/v2.7.0/examples/getting-started.md)
+- [Expression specifications](https://pysr.ai/v2.7.0/examples/expression-specifications.md)
+- [Objectives and losses](https://pysr.ai/v2.7.0/examples/objectives.md)
+- [Physics and units](https://pysr.ai/v2.7.0/examples/physics.md)
+- [Search behaviour](https://pysr.ai/v2.7.0/examples/search-behaviour.md)
+- [Instrumentation and workflow](https://pysr.ai/v2.7.0/examples/instrumentation.md)
+- [Value types](https://pysr.ai/v2.7.0/examples/value-types.md)
+- [Beyond numeric values](https://pysr.ai/v2.7.0/examples/beyond-numeric-values.md)
 
 ### Reference
 
-- [API Reference](https://pysr.ai/v2.6.2/api.md)
-- [Operators](https://pysr.ai/v2.6.2/operators.md)
-- [Features and Options](https://pysr.ai/v2.6.2/options.md)
-- [Internal Reference](https://pysr.ai/v2.6.2/api-advanced.md)
+- [API Reference](https://pysr.ai/v2.7.0/api.md)
+- [Operators](https://pysr.ai/v2.7.0/operators.md)
+- [Features and Options](https://pysr.ai/v2.7.0/options.md)
+- [Internal Reference](https://pysr.ai/v2.7.0/api-advanced.md)
 
 ### Community
 
-- [Research](https://pysr.ai/v2.6.2/papers.md)
+- [Research](https://pysr.ai/v2.7.0/papers.md)
 
 ### Advanced
 
-- [Tuning and Workflow Tips](https://pysr.ai/v2.6.2/tuning.md)
-- [Slurm (Multi-node)](https://pysr.ai/v2.6.2/slurm.md)
-- [Customization](https://pysr.ai/v2.6.2/backend.md)
-- [Migrating from v1 to v2](https://pysr.ai/v2.6.2/migration.md)
+- [Tuning and Workflow Tips](https://pysr.ai/v2.7.0/tuning.md)
+- [Slurm (Multi-node)](https://pysr.ai/v2.7.0/slurm.md)
+- [Customization](https://pysr.ai/v2.7.0/backend.md)
+- [Migrating from v1 to v2](https://pysr.ai/v2.7.0/migration.md)
 
