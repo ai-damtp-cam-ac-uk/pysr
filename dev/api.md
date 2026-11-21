@@ -1082,7 +1082,7 @@ will require a `.refresh()` to update the equations.
 
 | Name | Type | Description | Default |
 |------|------|-------------|---------|
-| `checkpoint_file` | `str or Path` | Path to checkpoint hall of fame file to be loaded. The default will use the set `equation_file_`. | *required* |
+| `run_directory` | `str or Path` | The directory containing outputs from a previous run. This is of the form `[output_directory]/[run_id]`. The default will use the directory from the last fit. | `None` |
 
 ## Expression Specifications
 
